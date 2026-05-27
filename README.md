@@ -4,6 +4,18 @@ Daemon que conecta dos niveles de VAS en una jerarquía de federación.
 
 Combina el rol de **VAC** (registro con identidad propia) y **VCD** (consumidor de inventario), publicando el inventario del VAS local como un campo extra en el VAS superior.
 
+## Ecosistema
+
+```
+vx-dga-l-vas   → servidor de registro canónico
+vx-dga-l-vac   → cliente de autoregistro (cada equipo)
+vx-dga-l-vcd   → consumidor genérico de inventario (hooks)
+vx-dga-l-vaf   → federación de servidores VAS (este paquete)
+```
+
+VAF asume que `LOCAL_VAS_HOST` tiene un VAS con sus propios clientes VAC registrados,
+y que `UPPER_VAS_HOST` es un VAS al que VAF se conecta como cliente.
+
 ## ¿Qué hace?
 
 ```
@@ -72,12 +84,12 @@ UPPER_VAS_HOST=http://10.0.0.1:8000
 | `KEY` | _(obligatorio)_ | Clave de agregación. El inventario local se publica como `extra_imperative.VAF_<KEY>`. |
 | `LOCAL_VAS_HOST` | `http://127.0.0.1:8000` | VAS local — fuente del inventario. |
 | `UPPER_VAS_HOST` | _(obligatorio)_ | VAS superior — destino del registro. |
-| `FILTER` | `active` | Filtro del VAS local: `active`, `inactive`, `all`. |
+| `FILTER` | `active` | Filtro del VAS local: `active`, `inactive`, `archived`, `all`. |
 | `GLOBAL_KEY` | _(vacío)_ | Clave extra enviada al VAS local como `?extra_key=KEY`. Filtra qué clientes locales incluir. Vacío = todos. |
 | `CHECK_SECONDS` | `300` | Intervalo entre comprobaciones de versión y heartbeat. |
 | `RETRY_SECONDS` | `60` | Espera ante errores de conexión. |
 | `SYNC_UPPER` | `false` | `true`: descarga el inventario del VAS superior en `upper_clients.json` tras cada cambio. |
-| `BUMP_LISTEN_PORT` | `0` | Puerto UDP de escucha para notificaciones push del VAS local. `0` = desactivado. |
+| `BUMP_LISTEN_PORT` | `0` | Puerto UDP de escucha para notificaciones push del VAS local. `0` = desactivado. Requiere `netcat-openbsd`. |
 
 ## Activación del hook en el VAS local
 
