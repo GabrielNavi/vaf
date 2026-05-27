@@ -1,0 +1,24 @@
+vx-dga-l-vaf (0.1-1) unstable; urgency=medium
+
+  * Initial release.
+  * VAF combina VAC y VCD: se registra en un VAS superior (UPPER_VAS_HOST)
+    con su propio UUID y monitoriza el VAS local (LOCAL_VAS_HOST) publicando
+    el inventario local como extra_imperative.VAF_<KEY> en el VAS superior.
+  * Binario vaf: daemon con bucle VAC (heartbeat, selfcheck hostname/IP/MAC,
+    GET /clients/{uuid} para verificar el extra almacenado en UPPER_VAS) y
+    bucle VCD (GET /version del VAS local, GET /clients con FILTER + GLOBAL_KEY).
+  * Binario vaf-register: registro puntual equivalente a vac-register.
+    Diseñado para ser llamado desde hooks.d/ del VAS local via el hook
+    local-vaf-register, actualizando el VAS superior inmediatamente tras
+    cada bump_version() sin esperar al ciclo del daemon.
+  * vaf-common.sh: librería compartida con funciones de red, registro,
+    heartbeat, selfcheck, fetch_local_clients (con FILTER y GLOBAL_KEY),
+    build_vaf_extra, refresh_upper_identity y descarga del inventario superior.
+  * BUMP_LISTEN_PORT: soporte VCD-Aware para interrumpir el sleep del ciclo
+    al recibir un datagrama UDP del VAS local.
+  * SYNC_UPPER=false: opción para descargar el inventario del VAS superior en
+    upper_clients.json (permite al nodo VAF conocer el estado agregado).
+  * Hook de ejemplo: /usr/share/vaf/hooks.d.examples/local-vaf-register
+    para instalar en /etc/vas/hooks.d/ del servidor VAS local.
+
+ -- Gabriel Navia <correos@gabrielnav.es>  Tue, 27 May 2026 21:00:00 +0200

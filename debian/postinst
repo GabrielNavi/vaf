@@ -1,0 +1,28 @@
+#!/bin/sh
+set -e
+
+echo "[VAF] Ejecutando postinst..."
+
+mkdir -p /etc/vaf
+mkdir -p /etc/vaf/vaf.conf.d
+mkdir -p /var/lib/vaf
+mkdir -p /var/run/vaf
+
+if [ ! -f /etc/vaf/vaf-id ]; then
+    uuidgen > /etc/vaf/vaf-id
+    chmod 600 /etc/vaf/vaf-id
+fi
+
+systemctl daemon-reload || true
+systemctl enable vaf.service || true
+
+if [ "$1" = "configure" ]; then
+    if [ -n "${2:-}" ]; then
+        systemctl restart vaf.service || true
+    else
+        systemctl start vaf.service || true
+    fi
+fi
+
+echo "[VAF] Instalacion completada."
+exit 0

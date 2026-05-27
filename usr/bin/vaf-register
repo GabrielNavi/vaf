@@ -1,0 +1,75 @@
+#!/bin/bash
+# vaf-register — Registro puntual de VAF en el VAS superior.
+#
+# Uso: vaf-register
+#
+# Equivalente a vac-register: hace una sola pasada sin necesidad de que
+# vaf.service esté activo. Diseñado para ser llamado desde hooks.d/ del
+# VAS local (via el hook local-vaf-register) de modo que cuando el VAS
+# local ejecuta bump_version(), VAF actualiza inmediatamente su extra en el
+# VAS superior sin esperar al siguiente ciclo del daemon.
+#
+# La versión local se actualiza tras el registro para que el daemon no repita
+# la sincronización en su próximo ciclo.
+
+set -euo pipefail
+
+LOG_TAG="[VAF-REGISTER]"
+source /usr/lib/vaf/vaf-common.sh
+load_all_conf
+
+# ---------------------------------------------------------------------------
+# Validaciones previas
+# ---------------------------------------------------------------------------
+if [[ -z "$KEY" ]]; then
+    log "ERROR: KEY no definida en vaf.conf."
+    exit 1
+fi
+
+if [[ -z "$UPPER_VAS_HOST" ]]; then
+    log "ERROR: UPPER_VAS_HOST no definido en vaf.conf."
+    exit 1
+fi
+
+if [[ ! -f "$ID_FILE" ]]; then
+    log "ERROR: $ID_FILE no existe. ¿Está VAF instalado e inicializado (vaf.service arrancó alguna vez)?"
+    exit 1
+fi
+
+CLIENT_ID="$(tr -d '[:space:]' < "$ID_FILE")"
+
+log "Iniciando registro puntual (VAF_${KEY} → ${UPPER_VAS_HOST})..."
+
+# ---------------------------------------------------------------------------
+# Obtener inventario local
+# ---------------------------------------------------------------------------
+if ! fetch_local_clients; then
+    log "ERROR: No se pudo descargar inventario del VAS local ($LOCAL_VAS_HOST)."
+    exit 1
+fi
+
+EXTRA_IMP="$(build_vaf_extra)"
+LOC_HOST="$(get_hostname)"
+LOC_IP="$(get_ip)"
+LOC_MAC="$(get_mac)"
+
+# ---------------------------------------------------------------------------
+# Registrar en VAS superior
+# ---------------------------------------------------------------------------
+if ! register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$EXTRA_IMP" "" > /dev/null; then
+    log "ERROR: No se pudo registrar en VAS superior ($UPPER_VAS_HOST)."
+    exit 1
+fi
+
+save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$EXTRA_IMP" ""
+
+# Confirmar con GET /clients/{uuid} que el extra fue almacenado
+refresh_upper_identity || log "AVISO: No se pudo verificar el extra en UPPER_VAS."
+
+# Actualizar versión local para que el daemon no repita la sincronización
+local_ver="$(get_local_version)"
+if [[ -n "$local_ver" && "$local_ver" =~ ^[0-9]+$ ]]; then
+    echo "$local_ver" > "$VERSION_FILE"
+fi
+
+log "Registro completado. VAF_${KEY} actualizado en ${UPPER_VAS_HOST}."

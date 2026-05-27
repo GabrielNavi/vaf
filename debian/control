@@ -1,0 +1,16 @@
+Source: vx-dga-l-vaf
+Priority: optional
+Maintainer: Gabriel Navia <correos@gabrielnav.es>
+Standards-Version: 4.6.0
+Build-Depends: debhelper-compat (= 13)
+Section: admin
+
+Package: vx-dga-l-vaf
+Architecture: all
+Depends: bash, curl, jq, uuid-runtime, iproute2
+Description: Federación de Autorregistro de Vitalinux (VAF)
+ Daemon que combina VAC y VCD para federar múltiples servidores VAS en
+ una jerarquía. Se registra en un VAS superior como cliente (VAC) y
+ monitoriza el inventario del VAS local para publicarlo como
+ extra_imperative.VAF_<KEY> (VCD). Permite al VAS superior agregar los
+ sub-inventarios de múltiples nodos VAF como campos de sus clientes.

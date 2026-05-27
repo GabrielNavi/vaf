@@ -1,0 +1,23 @@
+#!/bin/bash
+# local-vaf-register — Hook para el VAS local.
+#
+# Instalar en /etc/vas/hooks.d/ del servidor VAS local:
+#   cp /usr/share/vaf/hooks.d.examples/local-vaf-register /etc/vas/hooks.d/
+#   chmod +x /etc/vas/hooks.d/local-vaf-register
+#
+# Cuando el VAS local ejecuta bump_version(), este hook llama a vaf-register,
+# que actualiza inmediatamente extra_imperative.VAF_<KEY> en el VAS superior.
+# Así el VAS superior queda sincronizado en milisegundos, sin esperar al
+# próximo ciclo del daemon vaf (CHECK_SECONDS).
+#
+# Requiere: vaf instalado en el mismo equipo que el VAS local.
+# Variables de entorno inyectadas por VAS: VAS_VERSION, VAS_HOST.
+
+set -euo pipefail
+
+if ! command -v vaf-register >/dev/null 2>&1; then
+    echo "[local-vaf-register] vaf-register no encontrado. ¿Está vaf instalado?" >&2
+    exit 0
+fi
+
+vaf-register

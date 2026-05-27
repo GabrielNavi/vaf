@@ -1,0 +1,38 @@
+# Fichero de referencia — no edites este fichero.
+# Configuración activa:    /etc/vaf/vaf.conf
+# Sobreescrituras:         /etc/vaf/vaf.conf.d/*.conf
+
+# Clave de agregación. El inventario local se publica en el VAS superior como:
+#   extra_imperative.VAF_<KEY> = {"clients": [...]}
+# Obligatorio. Debe ser única por nodo VAF en la federación.
+KEY=
+
+# URL del VAS local — fuente del inventario de clientes.
+LOCAL_VAS_HOST=http://127.0.0.1:8000
+
+# URL del VAS superior — destino del registro de este nodo VAF.
+# Obligatorio. El nodo VAF se registra aquí como cliente normal con
+# extra_imperative.VAF_<KEY> conteniendo el inventario local.
+UPPER_VAS_HOST=
+
+# Filtro de clientes consultados al VAS local:
+#   active    → solo clientes activos
+#   inactive  → solo clientes inactivos
+#   all       → todos los clientes
+FILTER=active
+
+# Clave extra enviada al VAS local como ?extra_key=GLOBAL_KEY.
+# Vacío = inventario completo.
+GLOBAL_KEY=
+
+# Temporización
+CHECK_SECONDS=300
+RETRY_SECONDS=60
+
+# Sincronización del inventario del VAS superior en upper_clients.json.
+# false por defecto. Activar si el nodo necesita conocer el estado de la federación.
+SYNC_UPPER=false
+
+# Puerto UDP de escucha para notificaciones push del VAS local (como VCD-Aware).
+# 0 = desactivado.
+BUMP_LISTEN_PORT=0
