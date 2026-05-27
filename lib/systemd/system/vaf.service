@@ -6,8 +6,9 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStart=/usr/bin/vaf
-Restart=on-failure
+Restart=always
 RestartSec=30
+RuntimeDirectory=vaf
 
 [Install]
 WantedBy=multi-user.target

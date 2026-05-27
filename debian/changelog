@@ -1,3 +1,19 @@
+vx-dga-l-vaf (0.1-2) unstable; urgency=low
+
+  * vaf: corregido bug COALESCE: STARTUP_EXTRA y CURRENT_IMP usaban "{}" (borrado
+    explícito) en lugar de "" (COALESCE) cuando el inventario local no estaba
+    disponible o identity.json no existía. Ahora conserva el extra existente en VAS.
+  * vaf: añadida validación de FILTER al arranque (active/inactive/archived/all).
+  * vaf-register: añadido mkdir -p "$STATE_DIR" antes de escribir VERSION_FILE
+    para evitar fallo cuando el directorio no existe aún (primer uso sin daemon).
+  * vaf.service: Restart=on-failure → Restart=always; añadido RuntimeDirectory=vaf.
+  * debian/postinst: eliminado mkdir /var/run/vaf (tmpfs — inútil en reboot;
+    systemd lo gestiona con RuntimeDirectory=vaf en el service).
+  * debian/control: añadido Recommends: netcat-openbsd (BUMP_LISTEN_PORT).
+  * vaf.conf, vaf.conf.defaults: documentado 'archived' en opciones de FILTER.
+
+ -- Gabriel Navia <correos@gabrielnav.es>  Wed, 27 May 2026 22:00:00 +0200
+
 vx-dga-l-vaf (0.1-1) unstable; urgency=medium
 
   * Initial release.

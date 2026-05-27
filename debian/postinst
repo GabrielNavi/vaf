@@ -6,7 +6,6 @@ echo "[VAF] Ejecutando postinst..."
 mkdir -p /etc/vaf
 mkdir -p /etc/vaf/vaf.conf.d
 mkdir -p /var/lib/vaf
-mkdir -p /var/run/vaf
 
 if [ ! -f /etc/vaf/vaf-id ]; then
     uuidgen > /etc/vaf/vaf-id

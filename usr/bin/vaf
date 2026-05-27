@@ -46,6 +46,14 @@ if [[ -z "$KEY" ]]; then
     exit 1
 fi
 
+case "$FILTER" in
+    active|inactive|archived|all) ;;
+    *)
+        log "ERROR: FILTER inválido: '$FILTER'. Valores válidos: active, inactive, archived, all."
+        exit 1
+        ;;
+esac
+
 log "=== Iniciando VAF ==="
 log "KEY:             VAF_${KEY}"
 log "LOCAL_VAS_HOST:  $LOCAL_VAS_HOST"
@@ -107,8 +115,8 @@ log "[STARTUP] Registrando nodo en VAS superior (fase inicial)..."
 if fetch_local_clients; then
     STARTUP_EXTRA="$(build_vaf_extra)"
 else
-    STARTUP_EXTRA="{}"
-    log "[STARTUP] Inventario local no disponible. Registrando con VAF_${KEY} vacío."
+    STARTUP_EXTRA=""
+    log "[STARTUP] Inventario local no disponible. Registrando sin sobrescribir VAF_${KEY} existente."
 fi
 
 while true; do
@@ -154,10 +162,11 @@ while true; do
     LOC_MAC="$(get_mac)"
 
     # Extra actualmente en identity.json (para heartbeat sin re-fetch del inventario)
+    # "" = COALESCE (conservar lo que ya hay en el VAS superior)
     if load_identity; then
-        CURRENT_IMP="${IDENTITY_IMP:-{}}"
+        CURRENT_IMP="$IDENTITY_IMP"
     else
-        CURRENT_IMP="{}"
+        CURRENT_IMP=""
     fi
 
     # --- Paso 2: Selfcheck de identidad + heartbeat o registro ---------------

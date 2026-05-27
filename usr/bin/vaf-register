@@ -69,6 +69,7 @@ refresh_upper_identity || log "AVISO: No se pudo verificar el extra en UPPER_VAS
 # Actualizar versión local para que el daemon no repita la sincronización
 local_ver="$(get_local_version)"
 if [[ -n "$local_ver" && "$local_ver" =~ ^[0-9]+$ ]]; then
+    mkdir -p "$STATE_DIR"
     echo "$local_ver" > "$VERSION_FILE"
 fi
 
