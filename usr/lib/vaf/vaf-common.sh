@@ -272,7 +272,7 @@ get_upper_version() {
 # ---------------------------------------------------------------------------
 
 # GET /clients desde el VAS local con FILTER (status) y GLOBAL_KEY (extra_key),
-# igual que VCD. Guarda en clients.json de forma atómica.
+# igual que VAL. Guarda en clients.json de forma atómica.
 fetch_local_clients() {
     local url="${LOCAL_VAS_HOST%/}/clients"
     local params=""

@@ -2,14 +2,14 @@
 
 Daemon que conecta dos niveles de VAS en una jerarquía de federación.
 
-Combina el rol de **VAC** (registro con identidad propia) y **VCD** (consumidor de inventario), publicando el inventario del VAS local como un campo extra en el VAS superior.
+Combina el rol de **VAC** (registro con identidad propia) y **VAL** (consumidor de inventario), publicando el inventario del VAS local como un campo extra en el VAS superior.
 
 ## Ecosistema
 
 ```
 vx-dga-l-vas   → servidor de registro canónico
 vx-dga-l-vac   → cliente de autoregistro (cada equipo)
-vx-dga-l-vcd   → consumidor genérico de inventario (hooks)
+vx-dga-l-val   → consumidor genérico de inventario (hooks)
 vx-dga-l-vaf   → federación de servidores VAS (este paquete)
 ```
 
@@ -121,7 +121,7 @@ VAS local bump_version()
          → GET /clients/{uuid} (UPPER_VAS_HOST) para verificar
 ```
 
-El daemon `vaf` también puede recibir un bump UDP en `BUMP_LISTEN_PORT` (como VCD-Aware) para interrumpir el sleep e iniciar una comprobación inmediata.
+El daemon `vaf` también puede recibir un bump UDP en `BUMP_LISTEN_PORT` (como VAL-Aware) para interrumpir el sleep e iniciar una comprobación inmediata.
 
 ## Consulta del inventario agregado desde el VAS superior
 

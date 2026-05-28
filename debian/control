@@ -10,8 +10,8 @@ Architecture: all
 Depends: bash, curl, jq, uuid-runtime, iproute2
 Recommends: netcat-openbsd
 Description: Federación de Autorregistro de Vitalinux (VAF)
- Daemon que combina VAC y VCD para federar múltiples servidores VAS en
+ Daemon que combina VAC y VAL para federar múltiples servidores VAS en
  una jerarquía. Se registra en un VAS superior como cliente (VAC) y
  monitoriza el inventario del VAS local para publicarlo como
- extra_imperative.VAF_<KEY> (VCD). Permite al VAS superior agregar los
+ extra_imperative.VAF_<KEY> (VAL). Permite al VAS superior agregar los
  sub-inventarios de múltiples nodos VAF como campos de sus clientes.

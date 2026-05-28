@@ -34,6 +34,6 @@ RETRY_SECONDS=60
 # false por defecto. Activar si el nodo necesita conocer el estado de la federación.
 SYNC_UPPER=false
 
-# Puerto UDP de escucha para notificaciones push del VAS local (como VCD-Aware).
+# Puerto UDP de escucha para notificaciones push del VAS local (como VAL-Aware).
 # 0 = desactivado.
 BUMP_LISTEN_PORT=0

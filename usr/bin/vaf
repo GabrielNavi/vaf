@@ -1,13 +1,13 @@
 #!/bin/bash
 # vaf — Vitalinux Autoregistration Federated
 #
-# Daemon que combina VAC y VCD:
+# Daemon que combina VAC y VAL:
 #
 #   Como VAC: se registra en UPPER_VAS_HOST con su propio UUID, heartbeat
 #             periódico y selfcheck de identidad (hostname/IP/MAC). Verifica
 #             su registro con GET /clients/{uuid} (refresh_upper_identity).
 #
-#   Como VCD: monitoriza LOCAL_VAS_HOST; cuando el inventario local cambia
+#   Como VAL: monitoriza LOCAL_VAS_HOST; cuando el inventario local cambia
 #             (GET /version), descarga GET /clients con FILTER (status) y
 #             GLOBAL_KEY (extra_key), y actualiza extra_imperative.VAF_<KEY>
 #             en el VAS superior.
@@ -72,7 +72,7 @@ LOC_IP=""
 LOC_MAC=""
 
 # ---------------------------------------------------------------------------
-# Bump listener (notificación push desde VAS local, como VCD-Aware)
+# Bump listener (notificación push desde VAS local, como VAL-Aware)
 # ---------------------------------------------------------------------------
 BUMP_PID=""
 BUMP_FIFO="/var/run/vaf/bump.fifo"
@@ -191,7 +191,7 @@ while true; do
         refresh_upper_identity || log "[IDENTITY] No se pudo refrescar identity desde UPPER_VAS."
     fi
 
-    # --- Paso 3: Comprobar versión del VAS local (como VCD) ------------------
+    # --- Paso 3: Comprobar versión del VAS local (como VAL) ------------------
     local_version="$(tr -d '[:space:]' < "$VERSION_FILE")"
     log_debug "[LOCAL-VER] Versión local guardada: $local_version"
 
