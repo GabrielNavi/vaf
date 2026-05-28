@@ -1,3 +1,9 @@
+vx-dga-l-vaf (0.1-3) unstable; urgency=low
+
+  * debian/control: Standards-Version: 4.7.0.
+
+ -- Gabriel Navia <correos@gabrielnav.es>  Wed, 28 May 2026 14:30:00 +0200
+
 vx-dga-l-vaf (0.1-2) unstable; urgency=low
 
   * vaf: corregido bug COALESCE: STARTUP_EXTRA y CURRENT_IMP usaban "{}" (borrado
