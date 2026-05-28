@@ -1,4 +1,4 @@
-# vx-dga-l-vaf — Vitalinux Autoregistration Federated
+# vx-dga-l-vaf — Versatile Autoregistration Federated
 
 Daemon que conecta dos niveles de VAS en una jerarquía de federación.
 
