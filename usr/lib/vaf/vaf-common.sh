@@ -32,6 +32,7 @@ UPPER_VAS_HOST=""
 FILTER="active"
 GLOBAL_KEY=""
 CHECK_SECONDS=300
+HEARTBEAT_SECONDS=""   # vacío = igual a CHECK_SECONDS (resuelto tras load_all_conf)
 RETRY_SECONDS=60
 SYNC_UPPER=false
 BUMP_LISTEN_PORT=0
@@ -77,6 +78,7 @@ load_conf() {
             FILTER)           FILTER="$val";           (( ++loaded )) ;;
             GLOBAL_KEY)       GLOBAL_KEY="$val";       (( ++loaded )) ;;
             CHECK_SECONDS)    CHECK_SECONDS="$val";    (( ++loaded )) ;;
+            HEARTBEAT_SECONDS) HEARTBEAT_SECONDS="$val"; (( ++loaded )) ;;
             RETRY_SECONDS)    RETRY_SECONDS="$val";    (( ++loaded )) ;;
             SYNC_UPPER)       SYNC_UPPER="$val";       (( ++loaded )) ;;
             BUMP_LISTEN_PORT) BUMP_LISTEN_PORT="$val"; (( ++loaded )) ;;

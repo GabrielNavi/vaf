@@ -27,6 +27,7 @@ source /usr/lib/vaf/vaf-common.sh
 # Inicialización
 # ---------------------------------------------------------------------------
 load_all_conf
+: "${HEARTBEAT_SECONDS:=$CHECK_SECONDS}"   # vacío en conf → mismo intervalo que CHECK
 
 mkdir -p "$STATE_DIR"
 
@@ -61,6 +62,7 @@ log "UPPER_VAS_HOST:  ${UPPER_VAS_HOST:-(no definido)}"
 log "FILTER:          $FILTER"
 log "GLOBAL_KEY:      ${GLOBAL_KEY:-(ninguna)}"
 log "CHECK:           ${CHECK_SECONDS}s"
+log "HEARTBEAT:       ${HEARTBEAT_SECONDS}s"
 log "RETRY:           ${RETRY_SECONDS}s"
 log "SYNC_UPPER:      $SYNC_UPPER"
 log "BUMP_LISTEN_PORT:${BUMP_LISTEN_PORT} ($([ "$BUMP_LISTEN_PORT" != "0" ] && echo 'activo' || echo 'desactivado'))"
@@ -77,9 +79,13 @@ LOC_MAC=""
 BUMP_PID=""
 BUMP_FIFO="/var/run/vaf/bump.fifo"
 
+_bump_received=false
 interruptible_sleep() {
+    _bump_received=false
     if [[ "$BUMP_LISTEN_PORT" != "0" ]]; then
-        read -t "$1" -r _bump <&3 2>/dev/null || true
+        if read -t "$1" -r _bump_data <&3 2>/dev/null; then
+            _bump_received=true
+        fi
     else
         sleep "$1"
     fi
@@ -150,108 +156,130 @@ while true; do
 done
 
 # ---------------------------------------------------------------------------
+# Temporizadores y sleep base
+# ---------------------------------------------------------------------------
+LAST_CHECK_TS=$(date +%s)
+LAST_HB_TS=$(date +%s)
+if (( CHECK_SECONDS <= HEARTBEAT_SECONDS )); then
+    SLEEP_INTERVAL=$CHECK_SECONDS
+else
+    SLEEP_INTERVAL=$HEARTBEAT_SECONDS
+fi
+log "SLEEP_BASE:      ${SLEEP_INTERVAL}s"
+
+# ---------------------------------------------------------------------------
 # Bucle principal
 # ---------------------------------------------------------------------------
 while true; do
-    cycle_start="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-    log_debug "--- Ciclo iniciado: $cycle_start ---"
+    now=$(date +%s)
 
-    # --- Paso 1: Recopilar identidad propia ----------------------------------
+    # Recopilar datos de red una vez por ciclo (barato; necesario para ambos bloques)
     LOC_HOST="$(get_hostname)"
     LOC_IP="$(get_ip)"
     LOC_MAC="$(get_mac)"
 
-    # Extra actualmente en identity.json (para heartbeat sin re-fetch del inventario)
-    # "" = COALESCE (conservar lo que ya hay en el VAS superior)
-    if load_identity; then
-        CURRENT_IMP="$IDENTITY_IMP"
-    else
-        CURRENT_IMP=""
-    fi
+    # Un BUMP desde el VAS local fuerza el bloque CHECK sin esperar el temporizador
+    [[ "$_bump_received" == "true" ]] && LAST_CHECK_TS=0
 
-    # --- Paso 2: Selfcheck de identidad + heartbeat o registro ---------------
-    needs_register=false
+    # --- Bloque CHECK: versión VAS local + sync a UPPER (cada CHECK_SECONDS o BUMP) ---
+    if (( now - LAST_CHECK_TS >= CHECK_SECONDS )); then
+        log_debug "--- Ciclo de check local: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ---"
 
-    if selfcheck_local; then
-        if ! heartbeat_client; then
-            log "[HEARTBEAT] Sin respuesta o nodo no registrado — re-registrando."
-            needs_register=true
-        fi
-    else
-        needs_register=true
-    fi
+        local_version="$(tr -d '[:space:]' < "$VERSION_FILE")"
+        log_debug "[LOCAL-VER] Versión guardada: $local_version"
 
-    if [[ "$needs_register" == "true" ]]; then
-        if ! register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$CURRENT_IMP" "" > /dev/null; then
-            log "[VAF-ERROR] No se pudo contactar con VAS superior. Reintentando en ${RETRY_SECONDS}s."
+        remote_local_version="$(get_local_version)"
+
+        if [[ -z "$remote_local_version" ]]; then
+            log "[VAF-ERROR] No se pudo obtener versión de VAS local. Reintentando en ${RETRY_SECONDS}s."
             sleep "$RETRY_SECONDS"
             continue
         fi
-        save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$CURRENT_IMP" ""
-        refresh_upper_identity || log "[IDENTITY] No se pudo refrescar identity desde UPPER_VAS."
-    fi
 
-    # --- Paso 3: Comprobar versión del VAS local (como VAL) ------------------
-    local_version="$(tr -d '[:space:]' < "$VERSION_FILE")"
-    log_debug "[LOCAL-VER] Versión local guardada: $local_version"
+        if [[ ! "$remote_local_version" =~ ^[0-9]+$ ]]; then
+            log "[VAF-ERROR] Versión local inválida: '$remote_local_version'. Reintentando en ${RETRY_SECONDS}s."
+            sleep "$RETRY_SECONDS"
+            continue
+        fi
 
-    remote_local_version="$(get_local_version)"
+        if [[ "$remote_local_version" != "$local_version" ]]; then
+            log "[SYNC] Cambio en VAS local: $local_version → $remote_local_version"
 
-    if [[ -z "$remote_local_version" ]]; then
-        log "[VAF-ERROR] No se pudo obtener versión de VAS local. Reintentando en ${RETRY_SECONDS}s."
-        sleep "$RETRY_SECONDS"
-        continue
-    fi
-
-    if [[ ! "$remote_local_version" =~ ^[0-9]+$ ]]; then
-        log "[VAF-ERROR] Versión local inválida: '$remote_local_version'. Reintentando en ${RETRY_SECONDS}s."
-        sleep "$RETRY_SECONDS"
-        continue
-    fi
-
-    if [[ "$remote_local_version" != "$local_version" ]]; then
-        log "[SYNC] Cambio en VAS local: $local_version → $remote_local_version"
-
-        if fetch_local_clients; then
-            NEW_IMP="$(build_vaf_extra)"
-            log_debug "[SYNC] Actualizando VAF_${KEY} en VAS superior..."
-            if register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$NEW_IMP" "" > /dev/null; then
-                save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$NEW_IMP" ""
-                echo "$remote_local_version" > "$VERSION_FILE"
-                log "[SYNC] VAF_${KEY} actualizado. Versión local: $remote_local_version"
-                # Verificar que el VAS superior almacenó correctamente el extra
-                refresh_upper_identity || log "[IDENTITY] No se pudo verificar el extra en UPPER_VAS."
+            if fetch_local_clients; then
+                NEW_IMP="$(build_vaf_extra)"
+                log_debug "[SYNC] Actualizando VAF_${KEY} en VAS superior..."
+                if register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$NEW_IMP" "" > /dev/null; then
+                    save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$NEW_IMP" ""
+                    echo "$remote_local_version" > "$VERSION_FILE"
+                    log "[SYNC] VAF_${KEY} actualizado. Versión local: $remote_local_version"
+                    refresh_upper_identity || log "[IDENTITY] No se pudo verificar el extra en UPPER_VAS."
+                    LAST_HB_TS=$now   # el registro actualiza last_seen en UPPER_VAS
+                else
+                    log "[VAF-ERROR] No se pudo actualizar en VAS superior. Reintentando en ${RETRY_SECONDS}s."
+                    sleep "$RETRY_SECONDS"
+                    continue
+                fi
             else
-                log "[VAF-ERROR] No se pudo actualizar en VAS superior. Reintentando en ${RETRY_SECONDS}s."
+                log "[VAF-ERROR] No se pudo descargar inventario local. Reintentando en ${RETRY_SECONDS}s."
                 sleep "$RETRY_SECONDS"
                 continue
             fi
         else
-            log "[VAF-ERROR] No se pudo descargar inventario local. Reintentando en ${RETRY_SECONDS}s."
-            sleep "$RETRY_SECONDS"
-            continue
+            log_debug "[LOCAL-VER] Sin cambios en VAS local ($local_version)."
         fi
-    else
-        log_debug "[LOCAL-VER] Sin cambios en VAS local ($local_version)."
-    fi
 
-    # --- Paso 4: Comprobar versión del VAS superior (SYNC_UPPER) -------------
-    if [[ "$SYNC_UPPER" == "true" ]]; then
-        upper_version="$(tr -d '[:space:]' < "$UPPER_VERSION_FILE")"
-        remote_upper_version="$(get_upper_version)"
+        if [[ "$SYNC_UPPER" == "true" ]]; then
+            upper_version="$(tr -d '[:space:]' < "$UPPER_VERSION_FILE")"
+            remote_upper_version="$(get_upper_version)"
 
-        if [[ -n "$remote_upper_version" && "$remote_upper_version" =~ ^[0-9]+$ ]]; then
-            if [[ "$remote_upper_version" != "$upper_version" ]]; then
-                log "[UPPER] Nueva versión en VAS superior: $upper_version → $remote_upper_version"
-                if download_upper_clients; then
-                    echo "$remote_upper_version" > "$UPPER_VERSION_FILE"
+            if [[ -n "$remote_upper_version" && "$remote_upper_version" =~ ^[0-9]+$ ]]; then
+                if [[ "$remote_upper_version" != "$upper_version" ]]; then
+                    log "[UPPER] Nueva versión en VAS superior: $upper_version → $remote_upper_version"
+                    if download_upper_clients; then
+                        echo "$remote_upper_version" > "$UPPER_VERSION_FILE"
+                    fi
+                else
+                    log_debug "[UPPER] Sin cambios en VAS superior ($upper_version)."
                 fi
-            else
-                log_debug "[UPPER] Sin cambios en VAS superior ($upper_version)."
             fi
         fi
+
+        LAST_CHECK_TS=$now
     fi
 
-    log_debug "--- Ciclo completado. Próxima comprobación en ${CHECK_SECONDS}s. ---"
-    interruptible_sleep "$CHECK_SECONDS"
+    # --- Bloque HB: selfcheck de identidad + liveness UPPER_VAS (cada HEARTBEAT_SECONDS) ---
+    if (( now - LAST_HB_TS >= HEARTBEAT_SECONDS )); then
+        if load_identity; then
+            CURRENT_IMP="$IDENTITY_IMP"
+        else
+            CURRENT_IMP=""
+        fi
+
+        if ! selfcheck_local; then
+            if ! register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$CURRENT_IMP" "" > /dev/null; then
+                log "[VAF-ERROR] No se pudo contactar con VAS superior. Reintentando en ${RETRY_SECONDS}s."
+                sleep "$RETRY_SECONDS"
+                continue
+            fi
+            save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$CURRENT_IMP" ""
+            refresh_upper_identity || log "[IDENTITY] No se pudo refrescar identity desde UPPER_VAS."
+            LAST_CHECK_TS=$now   # el registro confirma identidad
+        else
+            if ! heartbeat_client; then
+                log "[HEARTBEAT] Sin respuesta o nodo no registrado — re-registrando."
+                if ! register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$CURRENT_IMP" "" > /dev/null; then
+                    log "[VAF-ERROR] No se pudo contactar con VAS superior. Reintentando en ${RETRY_SECONDS}s."
+                    sleep "$RETRY_SECONDS"
+                    continue
+                fi
+                save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$CURRENT_IMP" ""
+                refresh_upper_identity || log "[IDENTITY] No se pudo refrescar identity desde UPPER_VAS."
+                LAST_CHECK_TS=$now
+            fi
+        fi
+        LAST_HB_TS=$now
+    fi
+
+    log_debug "--- Próxima comprobación en ${SLEEP_INTERVAL}s. ---"
+    interruptible_sleep "$SLEEP_INTERVAL"
 done

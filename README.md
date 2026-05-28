@@ -86,7 +86,8 @@ UPPER_VAS_HOST=http://10.0.0.1:8000
 | `UPPER_VAS_HOST` | _(obligatorio)_ | VAS superior — destino del registro. |
 | `FILTER` | `active` | Filtro del VAS local: `active`, `inactive`, `archived`, `all`. |
 | `GLOBAL_KEY` | _(vacío)_ | Clave extra enviada al VAS local como `?extra_key=KEY`. Filtra qué clientes locales incluir. Vacío = todos. |
-| `CHECK_SECONDS` | `300` | Intervalo entre comprobaciones de versión y heartbeat. |
+| `CHECK_SECONDS` | `300` | Intervalo del bloque de sincronización: versión VAS local + push a UPPER_VAS. |
+| `HEARTBEAT_SECONDS` | _(= `CHECK_SECONDS`)_ | Intervalo del bloque de liveness: selfcheck + heartbeat a UPPER_VAS. Vacío = igual a `CHECK_SECONDS`. |
 | `RETRY_SECONDS` | `60` | Espera ante errores de conexión. |
 | `SYNC_UPPER` | `false` | `true`: descarga el inventario del VAS superior en `upper_clients.json` tras cada cambio. |
 | `BUMP_LISTEN_PORT` | `0` | Puerto UDP de escucha para notificaciones push del VAS local. `0` = desactivado. Requiere `netcat-openbsd`. |

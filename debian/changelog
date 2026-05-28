@@ -1,3 +1,20 @@
+vx-dga-l-vaf (0.1-4) unstable; urgency=low
+
+  * Nueva variable HEARTBEAT_SECONDS: desacopla la señal de liveness
+    (selfcheck de identidad + POST /heartbeat a UPPER_VAS) de la
+    sincronización del inventario local (CHECK_SECONDS: versión VAS local
+    + push a UPPER_VAS). Misma semántica que en vx-dga-l-vac 0.9-10~rc.
+    - HEARTBEAT_SECONDS vacío → igual a CHECK_SECONDS (backwards compatible).
+    - CHECK_SECONDS < HEARTBEAT_SECONDS → sync frecuente, heartbeat lento.
+    - CHECK_SECONDS > HEARTBEAT_SECONDS → liveness frecuente, sync lento.
+  * interruptible_sleep: expone _bump_received para que un BUMP UDP desde
+    el VAS local fuerce el bloque CHECK inmediatamente, con independencia
+    de los temporizadores CHECK_SECONDS y HEARTBEAT_SECONDS.
+  * vaf-common.sh: HEARTBEAT_SECONDS añadido a defaults y parser load_conf.
+  * vaf.conf, vaf.conf.defaults: HEARTBEAT_SECONDS documentado.
+
+ -- Gabriel Navia <correos@gabrielnav.es>  Wed, 28 May 2026 17:00:00 +0200
+
 vx-dga-l-vaf (0.1-3) unstable; urgency=low
 
   * debian/control: Standards-Version: 4.7.0.

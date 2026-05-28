@@ -28,6 +28,10 @@ GLOBAL_KEY=
 
 # Temporización
 CHECK_SECONDS=300
+# Intervalo entre señales de liveness. Vacío = igual a CHECK_SECONDS (backwards compatible).
+# CHECK_SECONDS < HEARTBEAT_SECONDS → sync frecuente, heartbeat lento.
+# CHECK_SECONDS > HEARTBEAT_SECONDS → liveness frecuente, sync lento.
+# HEARTBEAT_SECONDS=300
 RETRY_SECONDS=60
 
 # Sincronización del inventario del VAS superior en upper_clients.json.
