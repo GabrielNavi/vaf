@@ -66,6 +66,8 @@ log "HEARTBEAT:       ${HEARTBEAT_SECONDS}s"
 log "RETRY:           ${RETRY_SECONDS}s"
 log "SYNC_UPPER:      $SYNC_UPPER"
 log "BUMP_LISTEN_PORT:${BUMP_LISTEN_PORT} ($([ "$BUMP_LISTEN_PORT" != "0" ] && echo 'activo' || echo 'desactivado'))"
+log "USE_VAT:         $USE_VAT"
+[[ "$USE_VAT" == "true" ]] && log "VAT_PRESET:      $VAT_PRESET"
 log "UUID:            $CLIENT_ID"
 
 # Variables de ciclo
@@ -120,6 +122,18 @@ log "[STARTUP] Registrando nodo en VAS superior (fase inicial)..."
 
 if fetch_local_clients; then
     STARTUP_EXTRA="$(build_vaf_extra)"
+    # VAT: sanear el extra antes de enviarlo al VAS superior (direction=upstream)
+    if [[ "$USE_VAT" == "true" && -n "$VAT_PRESET" ]]; then
+        if command -v vat-operate &>/dev/null; then
+            STARTUP_EXTRA="$(echo "$STARTUP_EXTRA" | vat-operate \
+                --source-component VAF --direction upstream \
+                --preset "$VAT_PRESET" 2>/dev/null)" \
+            && log "[VAT] Extra de arranque saneado (upstream) con preset '$VAT_PRESET'" \
+            || log "[VAT-WARN] vat-operate falló en arranque. Extra sin sanear."
+        else
+            log "[VAT-WARN] USE_VAT=true pero vat-operate no encontrado."
+        fi
+    fi
 else
     STARTUP_EXTRA=""
     log "[STARTUP] Inventario local no disponible. Registrando sin sobrescribir VAF_${KEY} existente."
@@ -207,6 +221,18 @@ while true; do
 
             if fetch_local_clients; then
                 NEW_IMP="$(build_vaf_extra)"
+                # VAT: sanear el extra antes de enviarlo al VAS superior (direction=upstream)
+                if [[ "$USE_VAT" == "true" && -n "$VAT_PRESET" ]]; then
+                    if command -v vat-operate &>/dev/null; then
+                        NEW_IMP="$(echo "$NEW_IMP" | vat-operate \
+                            --source-component VAF --direction upstream \
+                            --preset "$VAT_PRESET" 2>/dev/null)" \
+                        && log "[VAT] Inventario upstream saneado con preset '$VAT_PRESET'" \
+                        || log "[VAT-WARN] vat-operate falló. Extra sin sanear."
+                    else
+                        log "[VAT-WARN] USE_VAT=true pero vat-operate no encontrado."
+                    fi
+                fi
                 log_debug "[SYNC] Actualizando VAF_${KEY} en VAS superior..."
                 if register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$NEW_IMP" "" > /dev/null; then
                     save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$NEW_IMP" ""

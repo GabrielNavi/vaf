@@ -36,6 +36,8 @@ HEARTBEAT_SECONDS=""   # vacío = igual a CHECK_SECONDS (resuelto tras load_all_
 RETRY_SECONDS=60
 SYNC_UPPER=false
 BUMP_LISTEN_PORT=0
+USE_VAT=false
+VAT_PRESET=""
 LOG_LEVEL="${LOG_LEVEL:-normal}"
 LOG_FILE="${LOG_FILE:-}"
 LOG_TAG="${LOG_TAG:-[VAF]}"
@@ -82,6 +84,8 @@ load_conf() {
             RETRY_SECONDS)    RETRY_SECONDS="$val";    (( ++loaded )) ;;
             SYNC_UPPER)       SYNC_UPPER="$val";       (( ++loaded )) ;;
             BUMP_LISTEN_PORT) BUMP_LISTEN_PORT="$val"; (( ++loaded )) ;;
+            USE_VAT)          USE_VAT="$val";          (( ++loaded )) ;;
+            VAT_PRESET)       VAT_PRESET="$val";       (( ++loaded )) ;;
             LOG_LEVEL)        LOG_LEVEL="$val";        (( ++loaded )) ;;
             LOG_FILE)         LOG_FILE="$val";         (( ++loaded )) ;;
         esac
@@ -319,6 +323,22 @@ download_upper_clients() {
         count="$(jq '.clients | length' "$TMP_UPPER_CLIENTS" 2>/dev/null || echo '?')"
         mv "$TMP_UPPER_CLIENTS" "$UPPER_CLIENTS_FILE"
         log "[UPPER] Inventario superior: $count nodo(s)"
+
+        # VAT: sanear upper_clients.json recién descargado (direction=downstream)
+        if [[ "$USE_VAT" == "true" && -n "$VAT_PRESET" ]]; then
+            if command -v vat-operate &>/dev/null; then
+                local vat_out
+                vat_out="$(vat-operate --source-component VAF --direction downstream \
+                    --preset "$VAT_PRESET" < "$UPPER_CLIENTS_FILE" 2>/dev/null)" \
+                && echo "$vat_out" > "${UPPER_CLIENTS_FILE}.tmp" \
+                && mv "${UPPER_CLIENTS_FILE}.tmp" "$UPPER_CLIENTS_FILE" \
+                && log "[VAT] upper_clients.json saneado (downstream) con preset '$VAT_PRESET'" \
+                || log "[VAT-WARN] vat-operate falló. upper_clients.json sin sanear."
+            else
+                log "[VAT-WARN] USE_VAT=true pero vat-operate no encontrado."
+            fi
+        fi
+
         return 0
     else
         log "[UPPER-ERROR] No se pudo descargar inventario de $UPPER_VAS_HOST."

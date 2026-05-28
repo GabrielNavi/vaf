@@ -1,3 +1,27 @@
+vx-dga-l-vaf (0.1-6) unstable; urgency=low
+
+  * debian/control: Suggests: vx-dga-l-vat.
+  * README.md, wiki Configuracion.md: documentados USE_VAT y VAT_PRESET
+    con tabla de los tres puntos de saneamiento y semántica de direcciones.
+
+ -- Gabriel Navia <correos@gabrielnav.es>  Wed, 28 May 2026 21:00:00 +0200
+
+vx-dga-l-vaf (0.1-5) unstable; urgency=low
+
+  * Integración opcional con vx-dga-l-vat (Versatile Autoregistration Transformer).
+  * vaf-common.sh: nuevas variables USE_VAT y VAT_PRESET en defaults y parser.
+  * vaf: aplica vat-operate --direction upstream sobre el extra VAF_<KEY>
+    en dos momentos: fase de arranque (sobre STARTUP_EXTRA) y bloque CHECK
+    (sobre NEW_IMP), ambos antes del POST /register en UPPER_VAS.
+  * vaf-common.sh: download_upper_clients() aplica vat-operate
+    --direction downstream sobre upper_clients.json tras cada descarga
+    cuando SYNC_UPPER=true, antes de que cualquier consumidor local lo lea.
+  * Todos los puntos VAT emiten [VAT-WARN] si USE_VAT=true pero vat-operate
+    no está instalado, haciendo fallback limpio (passthrough del JSON original).
+  * vaf.conf: USE_VAT y VAT_PRESET documentados.
+
+ -- Gabriel Navia <correos@gabrielnav.es>  Wed, 28 May 2026 20:00:00 +0200
+
 vx-dga-l-vaf (0.1-4) unstable; urgency=low
 
   * Nueva variable HEARTBEAT_SECONDS: desacopla la señal de liveness

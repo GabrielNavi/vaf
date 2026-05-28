@@ -9,6 +9,7 @@ Package: vx-dga-l-vaf
 Architecture: all
 Depends: bash, curl, jq, uuid-runtime, iproute2
 Recommends: netcat-openbsd
+Suggests: vx-dga-l-vat
 Description: Federación de Autorregistro Versátil (VAF)
  Daemon que combina VAC y VAL para federar múltiples servidores VAS en
  una jerarquía. Se registra en un VAS superior como cliente (VAC) y

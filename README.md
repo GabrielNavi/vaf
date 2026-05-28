@@ -91,6 +91,26 @@ UPPER_VAS_HOST=http://10.0.0.1:8000
 | `RETRY_SECONDS` | `60` | Espera ante errores de conexión. |
 | `SYNC_UPPER` | `false` | `true`: descarga el inventario del VAS superior en `upper_clients.json` tras cada cambio. |
 | `BUMP_LISTEN_PORT` | `0` | Puerto UDP de escucha para notificaciones push del VAS local. `0` = desactivado. Requiere `netcat-openbsd`. |
+| `USE_VAT` | `false` | Si `true`, aplica `vat-operate` sobre el inventario antes de enviarlo al VAS superior y sobre `upper_clients.json` tras descargarlo. Requiere `vx-dga-l-vat`. |
+| `VAT_PRESET` | _(vacío)_ | Nombre del preset VAT a aplicar. Obligatorio si `USE_VAT=true`. |
+
+## Integración con VAT
+
+Con `USE_VAT=true` y `vx-dga-l-vat` instalado, VAF saneea en **tres puntos**:
+
+| Punto | Cuándo | Dirección | Qué saneea |
+|---|---|---|---|
+| 1 | Arranque — antes del primer `POST /register` | `upstream` | `STARTUP_EXTRA` (extra VAF_KEY inicial) |
+| 2 | Bloque CHECK — antes de cada `POST /register` | `upstream` | `NEW_IMP` (extra VAF_KEY actualizado) |
+| 3 | `download_upper_clients()` si `SYNC_UPPER=true` | `downstream` | `upper_clients.json` recién descargado |
+
+```bash
+# /etc/vaf/vaf.conf
+USE_VAT=true
+VAT_PRESET=aula_upstream_minimal
+```
+
+Si `vat-operate` no está instalado se emite `[VAT-WARN]` y el dato se conserva sin modificar.
 
 ## Activación del hook en el VAS local
 
