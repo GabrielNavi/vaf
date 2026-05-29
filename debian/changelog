@@ -1,3 +1,13 @@
+vx-dga-l-vaf (0.1-7) unstable; urgency=low
+
+  * vaf: lecturas de VERSION_FILE y UPPER_VERSION_FILE con || echo "0"
+    para sobrevivir a purge concurrente o tmpfs sin fichero existente.
+  * vaf: save_identity con || log "[WARN]..." en todos los puntos del
+    bucle principal (arranque, bloque CHECK, bloque HB), alineado con
+    las correcciones aplicadas a vac y vac-sub.
+
+ -- Gabriel Navia <correos@gabrielnav.es>  Thu, 29 May 2026 11:00:00 +0200
+
 vx-dga-l-vaf (0.1-6) unstable; urgency=low
 
   * debian/control: Suggests: vx-dga-l-vat.

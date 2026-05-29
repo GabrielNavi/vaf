@@ -145,7 +145,7 @@ while true; do
     LOC_MAC="$(get_mac)"
 
     if register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$STARTUP_EXTRA" "" > /dev/null; then
-        save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$STARTUP_EXTRA" ""
+        save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$STARTUP_EXTRA" "" || log "[WARN] No se pudo guardar identity.json; continuando."
         log "[STARTUP] Registro inicial completado."
 
         # Confirmar con GET /clients/{uuid} que el VAS superior almacenó el extra
@@ -199,7 +199,7 @@ while true; do
     if (( now - LAST_CHECK_TS >= CHECK_SECONDS )); then
         log_debug "--- Ciclo de check local: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ---"
 
-        local_version="$(tr -d '[:space:]' < "$VERSION_FILE")"
+        local_version="$(tr -d '[:space:]' < "$VERSION_FILE" 2>/dev/null || echo "0")"
         log_debug "[LOCAL-VER] Versión guardada: $local_version"
 
         remote_local_version="$(get_local_version)"
@@ -235,7 +235,7 @@ while true; do
                 fi
                 log_debug "[SYNC] Actualizando VAF_${KEY} en VAS superior..."
                 if register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$NEW_IMP" "" > /dev/null; then
-                    save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$NEW_IMP" ""
+                    save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$NEW_IMP" "" || log "[WARN] No se pudo guardar identity.json; continuando."
                     echo "$remote_local_version" > "$VERSION_FILE"
                     log "[SYNC] VAF_${KEY} actualizado. Versión local: $remote_local_version"
                     refresh_upper_identity || log "[IDENTITY] No se pudo verificar el extra en UPPER_VAS."
@@ -255,7 +255,7 @@ while true; do
         fi
 
         if [[ "$SYNC_UPPER" == "true" ]]; then
-            upper_version="$(tr -d '[:space:]' < "$UPPER_VERSION_FILE")"
+            upper_version="$(tr -d '[:space:]' < "$UPPER_VERSION_FILE" 2>/dev/null || echo "0")"
             remote_upper_version="$(get_upper_version)"
 
             if [[ -n "$remote_upper_version" && "$remote_upper_version" =~ ^[0-9]+$ ]]; then
@@ -287,7 +287,7 @@ while true; do
                 sleep "$RETRY_SECONDS"
                 continue
             fi
-            save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$CURRENT_IMP" ""
+            save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$CURRENT_IMP" "" || log "[WARN] No se pudo guardar identity.json; continuando."
             refresh_upper_identity || log "[IDENTITY] No se pudo refrescar identity desde UPPER_VAS."
             LAST_CHECK_TS=$now   # el registro confirma identidad
         else
@@ -298,7 +298,7 @@ while true; do
                     sleep "$RETRY_SECONDS"
                     continue
                 fi
-                save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$CURRENT_IMP" ""
+                save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$CURRENT_IMP" "" || log "[WARN] No se pudo guardar identity.json; continuando."
                 refresh_upper_identity || log "[IDENTITY] No se pudo refrescar identity desde UPPER_VAS."
                 LAST_CHECK_TS=$now
             fi
