@@ -42,6 +42,16 @@ fi
 
 CLIENT_ID="$(tr -d '[:space:]' < "$ID_FILE")"
 
+# Validar formato UUID RFC 4122; regenerar si está corrupto.
+_uuid_valid_re='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+if [[ ! "$CLIENT_ID" =~ $_uuid_valid_re ]]; then
+    log "[WARN] UUID inválido en $ID_FILE ('$CLIENT_ID'). Regenerando..."
+    uuidgen > "$ID_FILE"
+    chmod 600 "$ID_FILE"
+    CLIENT_ID="$(tr -d '[:space:]' < "$ID_FILE")"
+    log "UUID regenerado: $CLIENT_ID"
+fi
+
 if [[ -z "$KEY" ]]; then
     log "ERROR: KEY no está definida en vaf.conf. Abortando."
     exit 1
@@ -154,14 +164,14 @@ while true; do
         # Guardar versión local actual para no repetir sincronización en el primer ciclo
         local_ver="$(get_local_version)"
         if [[ -n "$local_ver" && "$local_ver" =~ ^[0-9]+$ ]]; then
-            echo "$local_ver" > "$VERSION_FILE"
+            write_version "$local_ver"
             log "[STARTUP] Versión local inicializada: $local_ver"
         fi
 
         if [[ "$SYNC_UPPER" == "true" ]]; then
             download_upper_clients || log "[STARTUP] Inventario superior no disponible aún."
             upper_ver="$(get_upper_version)"
-            [[ -n "$upper_ver" && "$upper_ver" =~ ^[0-9]+$ ]] && echo "$upper_ver" > "$UPPER_VERSION_FILE"
+            [[ -n "$upper_ver" && "$upper_ver" =~ ^[0-9]+$ ]] && write_upper_version "$upper_ver"
         fi
         break
     fi
@@ -236,7 +246,7 @@ while true; do
                 log_debug "[SYNC] Actualizando VAF_${KEY} en VAS superior..."
                 if register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$NEW_IMP" "" > /dev/null; then
                     save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$NEW_IMP" "" || log "[WARN] No se pudo guardar identity.json; continuando."
-                    echo "$remote_local_version" > "$VERSION_FILE"
+                    write_version "$remote_local_version"
                     log "[SYNC] VAF_${KEY} actualizado. Versión local: $remote_local_version"
                     refresh_upper_identity || log "[IDENTITY] No se pudo verificar el extra en UPPER_VAS."
                     LAST_HB_TS=$now   # el registro actualiza last_seen en UPPER_VAS
@@ -262,7 +272,7 @@ while true; do
                 if [[ "$remote_upper_version" != "$upper_version" ]]; then
                     log "[UPPER] Nueva versión en VAS superior: $upper_version → $remote_upper_version"
                     if download_upper_clients; then
-                        echo "$remote_upper_version" > "$UPPER_VERSION_FILE"
+                        write_upper_version "$remote_upper_version"
                     fi
                 else
                     log_debug "[UPPER] Sin cambios en VAS superior ($upper_version)."

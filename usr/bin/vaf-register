@@ -70,7 +70,7 @@ refresh_upper_identity || log "AVISO: No se pudo verificar el extra en UPPER_VAS
 local_ver="$(get_local_version)"
 if [[ -n "$local_ver" && "$local_ver" =~ ^[0-9]+$ ]]; then
     mkdir -p "$STATE_DIR"
-    echo "$local_ver" > "$VERSION_FILE"
+    write_version "$local_ver"
 fi
 
 log "Registro completado. VAF_${KEY} actualizado en ${UPPER_VAS_HOST}."

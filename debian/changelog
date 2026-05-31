@@ -1,3 +1,24 @@
+vx-dga-l-vaf (0.1-8) unstable; urgency=low
+
+  * vaf-common.sh: save_identity() usa fichero temporal con PID
+    (identity.json.tmp.$$) en lugar de ruta fija compartida. Elimina la
+    race condition entre vaf daemon y vaf-register análoga a la corregida
+    en vx-dga-l-vac 0.9-18~rc. Variable global TMP_IDENTITY eliminada.
+  * vaf-common.sh: nuevas funciones write_version() y write_upper_version()
+    con rename atómico (tmp + mv) para escritura de VERSION_FILE y
+    UPPER_VERSION_FILE. Coherente con VAC (write_version) y VAS (os.replace).
+    Evita que una interrupción deje el fichero de versión truncado o vacío.
+  * vaf: usa write_version() y write_upper_version() en todos los puntos
+    del bloque de arranque y del bucle principal. vaf-register también usa
+    write_version() al actualizar la versión local tras el registro.
+  * vaf: validación de UUID en $ID_FILE al arrancar — regex RFC 4122; si
+    el fichero existe pero contiene un valor inválido, regenera UUID con
+    uuidgen y log [WARN]. Alineado con vx-dga-l-vac 0.9-17~rc.
+  * vaf-common.sh: añadida directiva # shellcheck shell=bash y
+    # shellcheck disable=SC2034 (variables de librería).
+
+ -- Gabriel Navia <correos@gabrielnav.es>  Sun, 31 May 2026 13:30:00 +0200
+
 vx-dga-l-vaf (0.1-7) unstable; urgency=low
 
   * vaf: lecturas de VERSION_FILE y UPPER_VERSION_FILE con || echo "0"

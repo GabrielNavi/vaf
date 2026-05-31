@@ -1,3 +1,5 @@
+# shellcheck shell=bash
+# shellcheck disable=SC2034  # Librería: variables definidas aquí son usadas por los scripts que la sourcean
 # vaf-common.sh — Funciones compartidas de VAF.
 #
 # Uso: source /usr/lib/vaf/vaf-common.sh
@@ -21,7 +23,6 @@ UPPER_VERSION_FILE="${STATE_DIR}/upper_version"
 UPPER_CLIENTS_FILE="${STATE_DIR}/upper_clients.json"
 TMP_UPPER_CLIENTS="${STATE_DIR}/upper_clients.json.tmp"
 IDENTITY_FILE="${STATE_DIR}/identity.json"
-TMP_IDENTITY="${STATE_DIR}/identity.json.tmp"
 
 # ---------------------------------------------------------------------------
 # Valores por defecto de configuración
@@ -127,6 +128,9 @@ get_mac() {
 # ---------------------------------------------------------------------------
 save_identity() {
     local host="$1" ip="$2" mac="$3" extra_imp="${4:-}" extra_inf="${5:-}"
+    # Tmp con PID para evitar colisión cuando vaf y vaf-register corren simultáneamente.
+    local tmp="${IDENTITY_FILE}.tmp.$$"
+
     jq -n \
         --arg     hostname  "$host"              \
         --arg     ip        "$ip"                \
@@ -139,9 +143,9 @@ save_identity() {
             mac:               $mac,
             extra_imperative:  $extra_imp,
             extra_informative: $extra_inf
-        }' > "$TMP_IDENTITY" 2>/dev/null \
-    && mv "$TMP_IDENTITY" "$IDENTITY_FILE" \
-    || { log "[IDENTITY] Error escribiendo $IDENTITY_FILE"; rm -f "$TMP_IDENTITY"; return 1; }
+        }' > "$tmp" 2>/dev/null \
+    && mv "$tmp" "$IDENTITY_FILE" \
+    || { log "[IDENTITY] Error escribiendo $IDENTITY_FILE"; rm -f "$tmp"; return 1; }
     log_debug "[IDENTITY] Guardado: $IDENTITY_FILE"
 }
 
@@ -345,6 +349,28 @@ download_upper_clients() {
         rm -f "$TMP_UPPER_CLIENTS"
         return 1
     fi
+}
+
+# ---------------------------------------------------------------------------
+# Escritura atómica de ficheros de versión
+# ---------------------------------------------------------------------------
+# write_version VERSION
+#   Escribe VERSION en VERSION_FILE (versión VAS local) mediante rename atómico.
+#   Coherente con VAC (write_version) y VAS (os.replace). Evita que una
+#   interrupción deje el fichero truncado o vacío, lo que forzaría una
+#   sincronización innecesaria en el siguiente ciclo.
+write_version() {
+    local ver="$1" tmp="${VERSION_FILE}.tmp"
+    echo "$ver" > "$tmp" && mv "$tmp" "$VERSION_FILE" \
+        || { rm -f "$tmp"; log "[WARN] No se pudo escribir VERSION_FILE."; }
+}
+
+# write_upper_version VERSION
+#   Igual que write_version pero para UPPER_VERSION_FILE (versión VAS superior).
+write_upper_version() {
+    local ver="$1" tmp="${UPPER_VERSION_FILE}.tmp"
+    echo "$ver" > "$tmp" && mv "$tmp" "$UPPER_VERSION_FILE" \
+        || { rm -f "$tmp"; log "[WARN] No se pudo escribir UPPER_VERSION_FILE."; }
 }
 
 # ---------------------------------------------------------------------------
