@@ -1,4 +1,4 @@
-# vx-dga-l-vaf — Versatile Autoregistration Federated
+# versatile-autoreg-vaf — Versatile Autoregistration Federated
 
 Daemon que conecta dos niveles de VAS en una jerarquía de federación.
 
@@ -7,10 +7,10 @@ Combina el rol de **VAC** (registro con identidad propia) y **VAL** (consumidor 
 ## Ecosistema
 
 ```
-vx-dga-l-vas   → servidor de registro canónico
-vx-dga-l-vac   → cliente de autoregistro (cada equipo)
-vx-dga-l-val   → consumidor genérico de inventario (hooks)
-vx-dga-l-vaf   → federación de servidores VAS (este paquete)
+versatile-autoreg-vas   → servidor de registro canónico
+versatile-autoreg-vac   → cliente de autoregistro (cada equipo)
+versatile-autoreg-val   → consumidor genérico de inventario (hooks)
+versatile-autoreg-vaf   → federación de servidores VAS (este paquete)
 ```
 
 VAF asume que `LOCAL_VAS_HOST` tiene un VAS con sus propios clientes VAC registrados,
@@ -91,12 +91,12 @@ UPPER_VAS_HOST=http://10.0.0.1:8000
 | `RETRY_SECONDS` | `60` | Espera ante errores de conexión. |
 | `SYNC_UPPER` | `false` | `true`: descarga el inventario del VAS superior en `upper_clients.json` tras cada cambio. |
 | `BUMP_LISTEN_PORT` | `0` | Puerto UDP de escucha para notificaciones push del VAS local. `0` = desactivado. Requiere `netcat-openbsd`. |
-| `USE_VAT` | `false` | Si `true`, aplica `vat-operate` sobre el inventario antes de enviarlo al VAS superior y sobre `upper_clients.json` tras descargarlo. Requiere `vx-dga-l-vat`. |
+| `USE_VAT` | `false` | Si `true`, aplica `vat-operate` sobre el inventario antes de enviarlo al VAS superior y sobre `upper_clients.json` tras descargarlo. Requiere `versatile-autoreg-vat`. |
 | `VAT_PRESET` | _(vacío)_ | Nombre del preset VAT a aplicar. Obligatorio si `USE_VAT=true`. |
 
 ## Integración con VAT
 
-Con `USE_VAT=true` y `vx-dga-l-vat` instalado, VAF saneea en **tres puntos**:
+Con `USE_VAT=true` y `versatile-autoreg-vat` instalado, VAF saneea en **tres puntos**:
 
 | Punto | Cuándo | Dirección | Qué saneea |
 |---|---|---|---|

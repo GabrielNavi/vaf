@@ -1,15 +1,15 @@
-Source: vx-dga-l-vaf
+Source: versatile-autoreg-vaf
 Priority: optional
 Maintainer: Gabriel Navia <correos@gabrielnav.es>
 Standards-Version: 4.7.0
 Build-Depends: debhelper-compat (= 13)
 Section: admin
 
-Package: vx-dga-l-vaf
+Package: versatile-autoreg-vaf
 Architecture: all
 Depends: bash, curl, jq, uuid-runtime, iproute2
 Recommends: netcat-openbsd
-Suggests: vx-dga-l-vat
+Suggests: versatile-autoreg-vat
 Description: Federación de Autorregistro Versátil (VAF)
  Daemon que combina VAC y VAL para federar múltiples servidores VAS en
  una jerarquía. Se registra en un VAS superior como cliente (VAC) y
