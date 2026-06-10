@@ -1,0 +1,266 @@
+#!/bin/bash
+# vaf-sub — Bucle VAF para una sub-instancia de paralelización.
+#
+# Uso: vaf-sub <name>
+#
+#   <name> es el nombre de la carpeta en /etc/vaf/vaf.sub/<name>/.
+#   Esa carpeta debe contener al menos vaf.conf con UPPER_VAS_HOST definido.
+#
+# Diferencias respecto a vaf:
+#   - Rutas derivadas del nombre: STATE_DIR=/var/lib/vaf/sub/<name>/
+#   - UUID derivado (v5): determinista (base vaf-id + name).
+#   - Hereda defaults de /etc/vaf/vaf.conf; sobreescribe con config de instancia.
+#   - LOCAL_VAS_HOST siempre compartido (VAF es local a VAS).
+#   - KEY defaults a <name> si no se configura.
+#   - LOG_TAG=[NAME-VAF] para identificar en journalctl.
+#
+# Journalctl:
+#   journalctl -u vaf     | grep '\[CAMPUS-VAF\]'   # cuando lo lanza vaf
+#   journalctl -u vaf-sub | grep '\[CAMPUS-VAF\]'   # cuando corre standalone
+
+set -euo pipefail
+
+if [[ $# -lt 1 || -z "$1" ]]; then
+    echo "Uso: vaf-sub <name>" >&2
+    exit 1
+fi
+
+NAME="$1"
+INSTANCE_DIR="/etc/vaf/vaf.sub/${NAME}"
+
+if [[ ! -d "$INSTANCE_DIR" ]]; then
+    echo "Error: sub-instancia '$NAME' no encontrada en $INSTANCE_DIR" >&2
+    exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Rutas derivadas — definir ANTES de sourcear vaf-common.sh
+# ---------------------------------------------------------------------------
+STATE_DIR="/var/lib/vaf/sub/${NAME}"
+CONF_FILE="${INSTANCE_DIR}/vaf.conf"
+CONF_DIR="${INSTANCE_DIR}/vaf.conf.d"
+EXTRAS_IMPERATIVE_HOOKS_DIR="${INSTANCE_DIR}/extras_imperative.d"
+EXTRAS_INFORMATIVE_HOOKS_DIR="${INSTANCE_DIR}/extras_informative.d"
+HOOKS_LOCAL_DIR="${INSTANCE_DIR}/hooks_local.d"
+ID_FILE="${STATE_DIR}/vaf-id"
+# shellcheck disable=SC2034
+LOG_TAG="[${NAME^^}-VAF]"
+
+source /usr/lib/vaf/vaf-common.sh
+
+# ---------------------------------------------------------------------------
+# Carga de configuración: base (herencia) + instancia (override)
+# ---------------------------------------------------------------------------
+load_conf "/etc/vaf/vaf.conf"
+load_conf "$CONF_FILE"
+if [[ -d "$CONF_DIR" ]]; then
+    for cfg in "$CONF_DIR"/*.conf; do
+        [[ -f "$cfg" ]] || continue
+        load_conf "$cfg"
+    done
+fi
+_normalize_upper_vas_host
+_resolve_local_vas_host
+: "${HEARTBEAT_SECONDS:=$CHECK_SECONDS}"
+
+# Re-aplicar rutas de instancia (load_conf hereda base y puede sobreescribirlas)
+EXTRAS_IMPERATIVE_HOOKS_DIR="${INSTANCE_DIR}/extras_imperative.d"
+EXTRAS_INFORMATIVE_HOOKS_DIR="${INSTANCE_DIR}/extras_informative.d"
+HOOKS_LOCAL_DIR="${INSTANCE_DIR}/hooks_local.d"
+
+# KEY defaults al nombre de la instancia
+[[ -z "$KEY" ]] && KEY="$NAME"
+
+# ---------------------------------------------------------------------------
+# Inicialización
+# ---------------------------------------------------------------------------
+mkdir -p "$STATE_DIR"
+
+# UUID derivado (v5, determinista por base+nombre)
+if [[ ! -f "$ID_FILE" ]]; then
+    BASE_UUID="$(tr -d '[:space:]' < /etc/vaf/vaf-id)"
+    uuidgen --sha1 --namespace "${BASE_UUID}" --name "${NAME}" > "$ID_FILE"
+    chmod 600 "$ID_FILE"
+    log "UUID derivado generado: $(cat "$ID_FILE") (base=${BASE_UUID} name=${NAME})"
+fi
+
+CLIENT_ID="$(tr -d '[:space:]' < "$ID_FILE")"
+_uuid_re='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+if [[ ! "$CLIENT_ID" =~ $_uuid_re ]]; then
+    log "[WARN] UUID inválido. Regenerando..."
+    BASE_UUID="$(tr -d '[:space:]' < /etc/vaf/vaf-id)"
+    uuidgen --sha1 --namespace "${BASE_UUID}" --name "${NAME}" > "$ID_FILE"
+    chmod 600 "$ID_FILE"
+    CLIENT_ID="$(tr -d '[:space:]' < "$ID_FILE")"
+    log "UUID regenerado: $CLIENT_ID"
+fi
+
+[[ ! -f "$VERSION_FILE"       ]] && echo "0" > "$VERSION_FILE"
+[[ ! -f "$UPPER_VERSION_FILE" ]] && echo "0" > "$UPPER_VERSION_FILE"
+
+log "=== Iniciando ${NAME}-vaf ==="
+log "KEY:            VAF_${KEY}_clients"
+log "LOCAL_VAS_HOST: $LOCAL_VAS_HOST"
+log "UPPER_VAS_HOST: ${UPPER_VAS_SCHEME}://${UPPER_VAS_HOST:-(no definido)}"
+log "FILTER:         $FILTER"
+log "CHECK:          ${CHECK_SECONDS}s  HEARTBEAT: ${HEARTBEAT_SECONDS}s"
+log "UUID:           $CLIENT_ID"
+
+LOC_HOST=""
+LOC_IP=""
+LOC_MAC=""
+EXTRA_IMP_BASE=""
+EXTRA_INF=""
+
+cleanup() { exit 0; }
+trap cleanup SIGTERM SIGINT
+
+# ---------------------------------------------------------------------------
+# Arranque: esperar UPPER_VAS y registro inicial
+# ---------------------------------------------------------------------------
+while [[ -z "$UPPER_VAS_HOST" ]]; do
+    log "UPPER_VAS_HOST no definido en $CONF_FILE. Esperando ${RETRY_SECONDS}s."
+    sleep "$RETRY_SECONDS"
+done
+
+log "[STARTUP] Registro inicial en VAS superior..."
+
+LOC_HOST="$(get_hostname)"
+LOC_IP="$(get_ip)"
+LOC_MAC="$(get_mac)"
+
+collect_extras_imperative
+if fetch_local_clients; then
+    STARTUP_IMP="$(build_vaf_extra "$EXTRA_IMP_BASE")"
+else
+    STARTUP_IMP="$(build_vaf_extra "$EXTRA_IMP_BASE")"
+    log "[STARTUP] Inventario local no disponible."
+fi
+
+while true; do
+    if register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$STARTUP_IMP" "" > /dev/null; then
+        save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$STARTUP_IMP" "" \
+            || log "[WARN] No se pudo guardar identity.json; continuando."
+        log "[STARTUP] Registro inicial completado."
+        refresh_upper_identity || log "[STARTUP] No se pudo refrescar identity."
+
+        local_ver="$(get_local_version)"
+        [[ -n "$local_ver" && "$local_ver" =~ ^[0-9]+$ ]] && write_version "$local_ver"
+        break
+    fi
+    log "[STARTUP] No se pudo contactar con VAS superior. Reintentando en ${RETRY_SECONDS}s."
+    sleep "$RETRY_SECONDS"
+done
+
+# ---------------------------------------------------------------------------
+# Temporizadores
+# ---------------------------------------------------------------------------
+LAST_CHECK_TS=$(date +%s)
+LAST_HB_TS=$(date +%s)
+if (( CHECK_SECONDS <= HEARTBEAT_SECONDS )); then
+    SLEEP_INTERVAL=$CHECK_SECONDS
+else
+    SLEEP_INTERVAL=$HEARTBEAT_SECONDS
+fi
+
+# ---------------------------------------------------------------------------
+# Bucle principal (idéntico a vaf con rutas de instancia)
+# ---------------------------------------------------------------------------
+while true; do
+    now=$(date +%s)
+    LOC_HOST="$(get_hostname)"
+    LOC_IP="$(get_ip)"
+    LOC_MAC="$(get_mac)"
+
+    if (( now - LAST_CHECK_TS >= CHECK_SECONDS )); then
+        collect_extras_imperative
+
+        local_version="$(tr -d '[:space:]' < "$VERSION_FILE" 2>/dev/null || echo "0")"
+        remote_local_version="$(get_local_version)"
+
+        if [[ -z "$remote_local_version" || ! "$remote_local_version" =~ ^[0-9]+$ ]]; then
+            log "[VAF-ERROR] No se pudo obtener versión de VAS local."
+            sleep "$RETRY_SECONDS"; continue
+        fi
+
+        local_changed=false
+        if [[ "$remote_local_version" != "$local_version" ]]; then
+            local_changed=true
+            log "[SYNC] Cambio en VAS local: $local_version → $remote_local_version"
+            if ! fetch_local_clients; then
+                log "[VAF-ERROR] No se pudo descargar inventario local."
+                sleep "$RETRY_SECONDS"; continue
+            fi
+            materialize_keys
+            dispatch_hooks_local "$remote_local_version"
+            write_version "$remote_local_version"
+        fi
+
+        NEW_IMP="$(build_vaf_extra "$EXTRA_IMP_BASE")"
+
+        if $local_changed || ! selfcheck_imp "$NEW_IMP"; then
+            if register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$NEW_IMP" "" > /dev/null; then
+                save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$NEW_IMP" "" \
+                    || log "[WARN] No se pudo guardar identity.json; continuando."
+                refresh_upper_identity || true
+                LAST_HB_TS=$now
+            else
+                log "[VAF-ERROR] No se pudo actualizar en VAS superior."
+                sleep "$RETRY_SECONDS"; continue
+            fi
+        fi
+
+        LAST_CHECK_TS=$now
+    fi
+
+    if (( now - LAST_HB_TS >= HEARTBEAT_SECONDS )); then
+        collect_extras_informative
+
+        if ! selfcheck_local; then
+            load_identity || true
+            if register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" \
+                    "${IDENTITY_IMP:-}" "$EXTRA_INF" > /dev/null; then
+                save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" \
+                    "${IDENTITY_IMP:-}" "$EXTRA_INF" \
+                    || log "[WARN] No se pudo guardar identity.json; continuando."
+                refresh_upper_identity || true
+            else
+                log "[VAF-ERROR] No se pudo contactar con VAS superior."
+                sleep "$RETRY_SECONDS"; continue
+            fi
+        elif [[ -n "$EXTRA_INF" ]]; then
+            load_identity || true
+            if [[ "$EXTRA_INF" != "${IDENTITY_INF:-}" ]]; then
+                register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" \
+                    "" "$EXTRA_INF" > /dev/null \
+                && save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" \
+                    "${IDENTITY_IMP:-}" "$EXTRA_INF" \
+                || log "[WARN] No se pudo actualizar extra_informative."
+            else
+                if ! heartbeat_client; then
+                    log "[HEARTBEAT] Sin respuesta — re-registrando."
+                    load_identity || true
+                    register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" \
+                        "${IDENTITY_IMP:-}" "$EXTRA_INF" > /dev/null \
+                    && save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" \
+                        "${IDENTITY_IMP:-}" "$EXTRA_INF" \
+                        || { log "[VAF-ERROR] No se pudo re-registrar."; sleep "$RETRY_SECONDS"; continue; }
+                fi
+            fi
+        else
+            if ! heartbeat_client; then
+                log "[HEARTBEAT] Sin respuesta — re-registrando."
+                load_identity || true
+                register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" \
+                    "${IDENTITY_IMP:-}" "" > /dev/null \
+                && save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" \
+                    "${IDENTITY_IMP:-}" "" \
+                    || { log "[VAF-ERROR] No se pudo re-registrar."; sleep "$RETRY_SECONDS"; continue; }
+            fi
+        fi
+
+        LAST_HB_TS=$now
+    fi
+
+    sleep "$SLEEP_INTERVAL"
+done

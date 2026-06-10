@@ -1,0 +1,14 @@
+[Unit]
+Description=Versatile Autoregistration Federated — Sub-instance Manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/vaf-sub-manager
+Restart=on-failure
+RestartSec=30
+RuntimeDirectory=vaf
+
+[Install]
+WantedBy=multi-user.target

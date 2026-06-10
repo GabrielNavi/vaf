@@ -1,7 +1,12 @@
 usr/bin/vaf usr/bin/
 usr/bin/vaf-register usr/bin/
+usr/bin/vaf-sub usr/bin/
+usr/bin/vaf-sub-manager usr/bin/
+usr/bin/vaf-sub-instance usr/bin/
 usr/lib/vaf/vaf-common.sh usr/lib/vaf/
 etc/vaf/vaf.conf etc/vaf/
 lib/systemd/system/vaf.service lib/systemd/system/
+lib/systemd/system/vaf-sub.service lib/systemd/system/
 usr/share/vaf/vaf.conf.defaults usr/share/vaf/
 usr/share/vaf/hooks.d/local-vaf-register usr/share/vaf/hooks.d/
+usr/share/vaf/instance-template/vaf.conf usr/share/vaf/instance-template/

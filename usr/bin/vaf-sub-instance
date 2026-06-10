@@ -1,0 +1,172 @@
+#!/bin/bash
+# vaf-sub-instance — Gestión del ciclo de vida de sub-instancias VAF.
+#
+# Uso:
+#   vaf-sub-instance --create NAME --upper HOST [:PORT] [--key KEY]
+#       Crea /etc/vaf/vaf.sub/NAME/ con vaf.conf apuntando a UPPER_VAS_HOST.
+#
+#   vaf-sub-instance --delete NAME
+#       Elimina /etc/vaf/vaf.sub/NAME/ y /var/lib/vaf/sub/NAME/.
+#
+#   vaf-sub-instance --list
+#       Lista sub-instancias configuradas: nombre, UPPER_VAS_HOST, KEY y estado.
+#
+# Estado reportado en --list:
+#   activa  — proceso vaf-sub corriendo en este momento
+#   parada  — existe estado en /var/lib/vaf/sub/NAME/ pero no corre
+#   nueva   — nunca ha arrancado (sin estado)
+
+set -euo pipefail
+
+TEMPLATE_FILE="/usr/share/vaf/instance-template/vaf.conf"
+SUB_CONF_DIR="/etc/vaf/vaf.sub"
+SUB_STATE_DIR="/var/lib/vaf/sub"
+
+usage() {
+    cat >&2 <<'EOF'
+Uso:
+  vaf-sub-instance --create NAME --upper HOST[:PORT] [--key KEY]
+  vaf-sub-instance --delete NAME
+  vaf-sub-instance --list
+EOF
+    exit 1
+}
+
+ACTION=""
+NAME=""
+UPPER_URL=""
+INSTANCE_KEY=""
+
+[[ $# -eq 0 ]] && usage
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --create)
+            ACTION="create"
+            [[ -z "${2:-}" ]] && { echo "Error: --create requiere NAME." >&2; exit 1; }
+            NAME="$2"; shift 2 ;;
+        --delete)
+            ACTION="delete"
+            [[ -z "${2:-}" ]] && { echo "Error: --delete requiere NAME." >&2; exit 1; }
+            NAME="$2"; shift 2 ;;
+        --list)
+            ACTION="list"; shift ;;
+        --upper)
+            [[ -z "${2:-}" ]] && { echo "Error: --upper requiere HOST[:PORT]." >&2; exit 1; }
+            UPPER_URL="$2"; shift 2 ;;
+        --key)
+            [[ -z "${2:-}" ]] && { echo "Error: --key requiere KEY." >&2; exit 1; }
+            INSTANCE_KEY="$2"; shift 2 ;;
+        *) echo "Opción desconocida: $1" >&2; usage ;;
+    esac
+done
+
+[[ -z "$ACTION" ]] && usage
+
+# ---------------------------------------------------------------------------
+# --create
+# ---------------------------------------------------------------------------
+if [[ "$ACTION" == "create" ]]; then
+    [[ "$NAME" =~ ^[a-zA-Z0-9_-]+$ ]] \
+        || { echo "Error: NAME solo puede contener letras, dígitos, - y _." >&2; exit 1; }
+    [[ -z "$UPPER_URL" ]] \
+        && { echo "Error: --create requiere --upper HOST[:PORT]." >&2; exit 1; }
+    [[ ! -f "$TEMPLATE_FILE" ]] \
+        && { echo "Error: no se encuentra $TEMPLATE_FILE." >&2; exit 1; }
+
+    INSTANCE_DIR="${SUB_CONF_DIR}/${NAME}"
+    if [[ -d "$INSTANCE_DIR" ]]; then
+        echo "Error: sub-instancia '$NAME' ya existe en $INSTANCE_DIR" >&2
+        exit 1
+    fi
+
+    mkdir -p "${INSTANCE_DIR}/vaf.conf.d"
+    mkdir -p "${INSTANCE_DIR}/hooks_local.d"
+    mkdir -p "${INSTANCE_DIR}/extras_imperative.d"
+    mkdir -p "${INSTANCE_DIR}/extras_informative.d"
+
+    sed "s|^UPPER_VAS_HOST=.*|UPPER_VAS_HOST=${UPPER_URL}|" \
+        "$TEMPLATE_FILE" > "${INSTANCE_DIR}/vaf.conf"
+
+    if [[ -n "$INSTANCE_KEY" ]]; then
+        sed -i "s|^KEY=.*|KEY=${INSTANCE_KEY}|" "${INSTANCE_DIR}/vaf.conf"
+    fi
+
+    touch "${INSTANCE_DIR}/.enabled"
+
+    echo "Sub-instancia '${NAME}' creada y activada en ${INSTANCE_DIR}."
+    echo "  UPPER_VAS_HOST: ${UPPER_URL}"
+    echo "  KEY:            ${INSTANCE_KEY:-${NAME} (default)}"
+    echo "  vaf.conf:       ${INSTANCE_DIR}/vaf.conf"
+    echo "  .enabled:       ${INSTANCE_DIR}/.enabled  (rm para desactivar)"
+    echo ""
+    echo "Para aplicar: systemctl restart vaf  (o vaf-sub si usa el servicio independiente)"
+fi
+
+# ---------------------------------------------------------------------------
+# --delete
+# ---------------------------------------------------------------------------
+if [[ "$ACTION" == "delete" ]]; then
+    INSTANCE_DIR="${SUB_CONF_DIR}/${NAME}"
+    STATE_DIR_DEL="${SUB_STATE_DIR}/${NAME}"
+
+    if [[ ! -d "$INSTANCE_DIR" ]]; then
+        echo "Error: sub-instancia '$NAME' no encontrada en $INSTANCE_DIR" >&2
+        exit 1
+    fi
+
+    if pgrep -f "vaf-sub ${NAME}$" >/dev/null 2>&1; then
+        echo "Error: vaf-sub '${NAME}' parece estar en ejecución." >&2
+        echo "       Detén el servicio antes de eliminar la sub-instancia." >&2
+        exit 1
+    fi
+
+    rm -rf "$INSTANCE_DIR"
+    echo "Configuración eliminada: ${INSTANCE_DIR}"
+
+    if [[ -d "$STATE_DIR_DEL" ]]; then
+        rm -rf "$STATE_DIR_DEL"
+        echo "Estado eliminado:        ${STATE_DIR_DEL}"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# --list
+# ---------------------------------------------------------------------------
+if [[ "$ACTION" == "list" ]]; then
+    found=0
+    for instance_dir in "${SUB_CONF_DIR}"/*/; do
+        [[ -d "$instance_dir" && -f "${instance_dir}/vaf.conf" ]] && (( ++found )) || true
+    done
+
+    if [[ "$found" -eq 0 ]]; then
+        echo "Sin sub-instancias configuradas en ${SUB_CONF_DIR}."
+        exit 0
+    fi
+
+    printf "%-20s %-36s %-16s %-10s %s\n" "NOMBRE" "UPPER_VAS_HOST" "KEY" "ENABLED" "ESTADO"
+    printf "%-20s %-36s %-16s %-10s %s\n" "------" "--------------" "---" "-------" "------"
+
+    for instance_dir in "${SUB_CONF_DIR}"/*/; do
+        [[ -d "$instance_dir" ]] || continue
+        name="$(basename "$instance_dir")"
+        [[ -f "${instance_dir}/vaf.conf" ]] || continue
+
+        upper_host="$(grep -m1 '^UPPER_VAS_HOST' "${instance_dir}/vaf.conf" \
+            | cut -d= -f2- | tr -d '"' | xargs 2>/dev/null || echo '?')"
+        key="$(grep -m1 '^KEY' "${instance_dir}/vaf.conf" \
+            | cut -d= -f2- | tr -d '"' | xargs 2>/dev/null || echo "(default)")"
+        [[ -z "$key" ]] && key="(hostname -s)"
+        enabled="$( [[ -f "${instance_dir}/.enabled" ]] && echo "sí" || echo "no")"
+
+        if pgrep -f "vaf-sub ${name}$" >/dev/null 2>&1; then
+            status="activa"
+        elif [[ -d "${SUB_STATE_DIR}/${name}" ]]; then
+            status="parada"
+        else
+            status="nueva"
+        fi
+
+        printf "%-20s %-36s %-16s %-10s %s\n" "$name" "$upper_host" "$key" "$enabled" "$status"
+    done
+fi

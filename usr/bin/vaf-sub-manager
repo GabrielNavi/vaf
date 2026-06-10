@@ -1,0 +1,127 @@
+#!/bin/bash
+# vaf-sub-manager — Supervisor de sub-instancias VAF.
+#
+# Escanea /etc/vaf/vaf.sub/*/ y lanza un proceso vaf-sub <name> por cada
+# carpeta que contenga vaf.conf Y un fichero .enabled.
+#
+# Tras MAX_FAILS arranques fallidos consecutivos (proceso muerto en menos de
+# MIN_UPTIME_SECS segundos), la instancia se marca como muerta y no se reinicia.
+#
+# Puede correr de dos maneras:
+#   - Como hijo de vaf (PARALLEL_MODE=both): logs en journal de vaf.service.
+#   - Como servicio independiente (vaf-sub.service): logs en vaf-sub.service.
+#
+# Journalctl:
+#   journalctl -u vaf     | grep '\[PARALLEL\]'
+#   journalctl -u vaf-sub | grep '\[PARALLEL\]'
+
+set -euo pipefail
+
+# shellcheck disable=SC2034
+LOG_TAG="[VAF]"
+source /usr/lib/vaf/vaf-common.sh
+load_all_conf
+
+SUB_DIR="/etc/vaf/vaf.sub"
+PIDFILE="/var/lib/vaf/vaf-sub-manager.pid"
+MAX_FAILS=5
+MIN_UPTIME_SECS=30
+
+mkdir -p "$(dirname "$PIDFILE")"
+
+# ---------------------------------------------------------------------------
+# Guarda contra doble arranque
+# ---------------------------------------------------------------------------
+if [[ -f "$PIDFILE" ]]; then
+    old_pid="$(cat "$PIDFILE" 2>/dev/null || echo "")"
+    if [[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null; then
+        log "[PARALLEL] vaf-sub-manager ya está corriendo (PID $old_pid). Saliendo."
+        exit 0
+    fi
+fi
+echo $$ > "$PIDFILE"
+
+# ---------------------------------------------------------------------------
+# Señales: propagar SIGTERM/SIGINT a todos los hijos
+# ---------------------------------------------------------------------------
+declare -A CHILD_PIDS
+
+cleanup() {
+    log "[PARALLEL] Cerrando sub-instancias..."
+    for name in "${!CHILD_PIDS[@]}"; do
+        kill "${CHILD_PIDS[$name]}" 2>/dev/null || true
+    done
+    wait 2>/dev/null || true
+    rm -f "$PIDFILE"
+    exit 0
+}
+trap cleanup SIGTERM SIGINT
+
+# ---------------------------------------------------------------------------
+# Lanzar sub-instancias activas
+# ---------------------------------------------------------------------------
+if [[ ! -d "$SUB_DIR" ]]; then
+    log "[PARALLEL] Directorio de sub-instancias no encontrado: $SUB_DIR"
+    rm -f "$PIDFILE"
+    exit 0
+fi
+
+declare -A FAIL_COUNT
+declare -A START_TIME
+
+launched=0
+for instance_dir in "$SUB_DIR"/*/; do
+    [[ -d "$instance_dir" ]] || continue
+    name="$(basename "$instance_dir")"
+    [[ -f "${instance_dir}/vaf.conf"  ]] || continue
+    [[ -f "${instance_dir}/.enabled"  ]] || { log_debug "[PARALLEL] ${name}: sin .enabled — ignorada."; continue; }
+
+    upper_host="$(grep -m1 '^UPPER_VAS_HOST' "${instance_dir}/vaf.conf" \
+        | cut -d= -f2- | tr -d '"' | xargs 2>/dev/null || echo '?')"
+
+    vaf-sub "$name" &
+    CHILD_PIDS[$name]=$!
+    FAIL_COUNT[$name]=0
+    START_TIME[$name]=$(date +%s)
+    log "[PARALLEL] Lanzado ${name}-vaf → ${upper_host} (PID ${CHILD_PIDS[$name]})"
+    (( ++launched ))
+done
+
+if [[ $launched -eq 0 ]]; then
+    log "[PARALLEL] Sin sub-instancias activas (.enabled) en $SUB_DIR"
+    rm -f "$PIDFILE"
+    exit 0
+fi
+
+log "[PARALLEL] $launched sub-instancia(s) activa(s)."
+
+# ---------------------------------------------------------------------------
+# Bucle de supervisión
+# ---------------------------------------------------------------------------
+while true; do
+    sleep 30
+    now=$(date +%s)
+    for name in "${!CHILD_PIDS[@]}"; do
+        pid="${CHILD_PIDS[$name]}"
+        if ! kill -0 "$pid" 2>/dev/null; then
+            uptime=$(( now - ${START_TIME[$name]:-now} ))
+            if (( uptime >= MIN_UPTIME_SECS )); then
+                FAIL_COUNT[$name]=0
+                log "[PARALLEL] ${name}-vaf (PID $pid) terminó tras ${uptime}s. Reiniciando..."
+            else
+                FAIL_COUNT[$name]=$(( ${FAIL_COUNT[$name]:-0} + 1 ))
+                fails="${FAIL_COUNT[$name]}"
+                if (( fails >= MAX_FAILS )); then
+                    log "[PARALLEL] ${name}-vaf falló ${fails} veces seguidas (uptime < ${MIN_UPTIME_SECS}s). Marcado como muerto."
+                    unset "CHILD_PIDS[$name]"
+                    continue
+                fi
+                log "[PARALLEL] ${name}-vaf terminó en ${uptime}s (fallo $fails/$MAX_FAILS). Reiniciando..."
+            fi
+            vaf-sub "$name" &
+            CHILD_PIDS[$name]=$!
+            START_TIME[$name]=$(date +%s)
+            log "[PARALLEL] ${name}-vaf relanzado (PID ${CHILD_PIDS[$name]})"
+        fi
+    done
+done
