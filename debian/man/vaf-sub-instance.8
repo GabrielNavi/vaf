@@ -1,0 +1,79 @@
+.TH VAF-SUB-INSTANCE 8 "2026-06-10" "versatile-autoreg-vaf" "System Administration"
+.SH NAME
+vaf-sub-instance \- manage VAF sub-instances
+.SH SYNOPSIS
+.B vaf-sub-instance
+.B \-\-create
+.I name
+.B \-\-upper
+.I HOST
+.B \-\-key
+.I KEY
+.br
+.B vaf-sub-instance
+.B \-\-delete
+.I name
+.br
+.B vaf-sub-instance
+.B \-\-list
+.SH DESCRIPTION
+.B vaf-sub-instance
+is the command-line interface for managing VAF sub-instances.
+A sub-instance allows a single VAF node to register simultaneously in
+multiple upper VAS servers, each with an independent UUID, configuration
+and state.
+.PP
+Sub-instance configuration directories are created under
+.IR /etc/vaf/vaf.sub/<name>/ .
+Each directory contains a
+.I vaf.conf
+file with at least
+.B UPPER_VAS_HOST
+and
+.BR KEY ,
+and a
+.I .enabled
+flag file whose presence enables the sub-instance.
+.SS Sub-instance UUID
+Each sub-instance derives a stable UUID using UUIDv5 (SHA-1 namespace),
+with the base
+.I /etc/vaf/vaf-id
+as namespace and the instance name as the name input. This guarantees
+that the sub-instance is always recognised by the same UUID in its upper
+VAS, even after reinstalling the package.
+.SH OPTIONS
+.TP
+.BI \-\-create " name " \-\-upper " HOST " \-\-key " KEY"
+Create a new sub-instance named
+.I name
+targeting
+.I HOST
+with aggregation key
+.IR KEY .
+Creates
+.I /etc/vaf/vaf.sub/<name>/vaf.conf
+and
+.IR /etc/vaf/vaf.sub/<name>/.enabled .
+Restart
+.BR vaf (8)
+after creation to activate.
+.TP
+.BI \-\-delete " name"
+Delete the sub-instance named
+.IR name ,
+removing its configuration directory.
+Restart
+.BR vaf (8)
+after deletion.
+.TP
+.B \-\-list
+List all sub-instances with their
+.BR UPPER_VAS_HOST ,
+.BR KEY ,
+enabled status and current state.
+.SH SEE ALSO
+.BR vaf (8),
+.BR vaf-sub-manager (8),
+.BR vaf-sub (8)
+.SH AUTHOR
+Gabriel Navia <correos@gabrielnav.es>

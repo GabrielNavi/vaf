@@ -1,0 +1,36 @@
+.TH VAF-SUB 8 "2026-06-10" "versatile-autoreg-vaf" "System Administration"
+.SH NAME
+vaf-sub \- VAF sub-instance federation loop
+.SH SYNOPSIS
+.B vaf-sub
+.I name
+.SH DESCRIPTION
+.B vaf-sub
+runs the full
+.BR vaf (8)
+main loop for a named sub-instance defined under
+.IR /etc/vaf/vaf.sub/<name>/ .
+It inherits the base configuration from
+.I /etc/vaf/vaf.conf
+and overrides federation-specific variables
+.RB ( UPPER_VAS_HOST ", " KEY )
+from
+.IR /etc/vaf/vaf.sub/<name>/vaf.conf .
+.PP
+.B vaf-sub
+is not intended to be invoked directly. It is started and supervised by
+.BR vaf-sub-manager (8),
+which is in turn launched by
+.BR vaf (8)
+when
+.B PARALLEL_MODE
+is
+.B both
+or
+.BR only_parallel .
+.SH SEE ALSO
+.BR vaf (8),
+.BR vaf-sub-manager (8),
+.BR vaf-sub-instance (8)
+.SH AUTHOR
+Gabriel Navia <correos@gabrielnav.es>

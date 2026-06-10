@@ -1,0 +1,34 @@
+.TH VAF-SUB-MANAGER 8 "2026-06-10" "versatile-autoreg-vaf" "System Administration"
+.SH NAME
+vaf-sub-manager \- supervisor for VAF sub-instances
+.SH DESCRIPTION
+.B vaf-sub-manager
+starts a
+.BR vaf-sub (8)
+process for each enabled sub-instance directory found under
+.I /etc/vaf/vaf.sub/
+(those containing a
+.I .enabled
+file) and monitors them.
+.PP
+If a sub-instance process dies within 30 seconds of starting, it is
+considered a hard failure. After five consecutive hard failures the
+supervisor stops restarting that instance and logs a suspension message.
+Transient failures (process ran for at least 30 seconds) reset the hard
+failure counter.
+.PP
+.B vaf-sub-manager
+is not intended to be invoked directly. It is launched by
+.BR vaf (8)
+when
+.B PARALLEL_MODE
+is
+.B both
+or
+.BR only_parallel .
+.SH SEE ALSO
+.BR vaf (8),
+.BR vaf-sub (8),
+.BR vaf-sub-instance (8)
+.SH AUTHOR
+Gabriel Navia <correos@gabrielnav.es>

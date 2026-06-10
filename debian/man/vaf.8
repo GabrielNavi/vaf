@@ -1,0 +1,171 @@
+.TH VAF 8 "2026-06-10" "versatile-autoreg-vaf" "System Administration"
+.SH NAME
+vaf \- Versatile Autoregistration Federated daemon
+.SH SYNOPSIS
+.B vaf
+.SH DESCRIPTION
+.B vaf
+is a systemd service that combines the roles of
+.BR vac (8)
+(client registration) and
+.BR val (8)
+(inventory listener) to federate multiple VAS servers into a hierarchy.
+.PP
+.B vaf
+monitors the inventory of a local
+.BR vas (8)
+instance and publishes it as an
+.B extra_imperative
+field in an upper-level VAS, under the key
+.BR VAF_<KEY> .
+This allows the upper VAS to aggregate inventories from multiple sites
+without any changes to the VAS server code.
+.SS Dual-block main loop
+On each cycle
+.B vaf
+runs two independent blocks governed by separate timers:
+.TP
+.B CHECK block
+Compares the local VAS version against the stored version. If changed,
+downloads the local inventory and re-registers in the upper VAS with the
+updated
+.B VAF_<KEY>
+payload.
+.TP
+.B HB block
+Checks whether the node identity (hostname, IP, MAC) has changed. If so,
+sends a full
+.B POST /register
+to the upper VAS; otherwise sends a lightweight
+.B POST /heartbeat
+(~50 bytes).
+.SS VAF-Aware push
+When
+.B BUMP_LISTEN_PORT
+is set to a non-zero value,
+.B vaf
+opens a UDP socket on that port.
+Any incoming datagram interrupts the polling sleep and triggers an
+immediate CHECK cycle.
+Requires
+.BR netcat-openbsd .
+This mechanism is also used by the
+.B local-vaf-register
+hook, automatically installed in
+.IR /etc/vas/hooks.d/ ,
+to notify
+.B vaf
+of every
+.BR vas (8)
+.B bump_version()
+event.
+.SS Sub-instances
+.B vaf
+can register simultaneously in multiple upper VAS servers through
+sub-instances managed by
+.BR vaf-sub-manager (8).
+See
+.BR vaf-sub-instance (8)
+for the sub-instance management CLI.
+.SH CONFIGURATION
+.B vaf
+reads
+.I /etc/vaf/vaf.conf
+and overlays in
+.IR /etc/vaf/vaf.conf.d/ .
+Key variables:
+.TP
+.B KEY
+Aggregation key. The local inventory is published in the upper VAS as
+.BR extra_imperative.VAF_<KEY> .
+Mandatory; fatal error if empty.
+.TP
+.B LOCAL_VAS_HOST
+Base URL of the local VAS instance. Auto-detected from
+.I /etc/vas/vas.conf
+if not set.
+.TP
+.B UPPER_VAS_HOST
+Base URL of the upper VAS. Mandatory for operation; daemon blocks until defined.
+.TP
+.B CHECK_SECONDS
+Interval for the CHECK block in seconds (default:
+.BR 300 ).
+.TP
+.B HEARTBEAT_SECONDS
+Interval for the HB block in seconds. Defaults to
+.B CHECK_SECONDS
+if unset.
+.TP
+.B BUMP_LISTEN_PORT
+UDP port for VAF-Aware push notifications;
+.B 0
+disables (default:
+.BR 0 ).
+.TP
+.B SYNC_UPPER
+If
+.BR true ,
+download the upper VAS inventory into
+.I /var/lib/vaf/upper_clients.json
+after each version change (default:
+.BR false ).
+.TP
+.B PARALLEL_MODE
+Controls sub-instance parallelism:
+.B both
+(default),
+.BR only_parallel ,
+or
+.BR only_main .
+.TP
+.B LOG_LEVEL
+Log verbosity:
+.B no
+|
+.B normal
+|
+.B debug
+(default:
+.BR normal ).
+.SH FILES
+.TP
+.I /etc/vaf/vaf.conf
+Main configuration file.
+.TP
+.I /etc/vaf/vaf.conf.d/
+Drop-in configuration overlays.
+.TP
+.I /etc/vaf/vaf-id
+Persistent node UUID (generated once, mode 600).
+.TP
+.I /etc/vaf/extras_imperative.d/
+Hook scripts for imperative extras sent to the upper VAS.
+.TP
+.I /etc/vaf/extras_informative.d/
+Hook scripts for informative extras sent to the upper VAS.
+.TP
+.I /etc/vaf/hooks_local.d/
+Hook scripts executed when the local VAS inventory changes.
+.TP
+.I /var/lib/vaf/identity.json
+Node identity as confirmed by the upper VAS.
+.TP
+.I /var/lib/vaf/local_version
+Last local VAS version processed.
+.TP
+.I /var/lib/vaf/clients.json
+Last local inventory downloaded.
+.TP
+.I /usr/share/vaf/vaf.conf.defaults
+Reference copy of all configuration variables with documentation.
+.SH SEE ALSO
+.BR vaf-register (8),
+.BR vaf-sub (8),
+.BR vaf-sub-manager (8),
+.BR vaf-sub-instance (8),
+.BR vas (8),
+.BR vac (8),
+.BR systemctl (1)
+.SH AUTHOR
+Gabriel Navia <correos@gabrielnav.es>

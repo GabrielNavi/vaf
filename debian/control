@@ -7,7 +7,7 @@ Section: admin
 
 Package: versatile-autoreg-vaf
 Architecture: all
-Depends: versatile-autoreg-vas, bash, curl, jq, uuid-runtime, iproute2
+Depends: versatile-autoreg-vas, curl, jq, uuid-runtime, iproute2
 Suggests: versatile-autoreg-vat
 Description: Federación de Autorregistro Versátil (VAF)
  Daemon que combina VAC y VAL para federar múltiples servidores VAS en

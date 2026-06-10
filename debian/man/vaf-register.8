@@ -1,0 +1,37 @@
+.TH VAF-REGISTER 8 "2026-06-10" "versatile-autoreg-vaf" "System Administration"
+.SH NAME
+vaf-register \- one-shot VAF registration in the upper VAS
+.SH SYNOPSIS
+.B vaf-register
+.SH DESCRIPTION
+.B vaf-register
+performs a single registration cycle: it downloads the local VAS inventory
+and registers it in the upper VAS as
+.BR extra_imperative.VAF_<KEY> ,
+then exits.
+.PP
+It is called by the
+.B local-vaf-register
+hook installed in
+.I /etc/vas/hooks.d/
+by the
+.BR vaf (8)
+package postinst. The hook fires on every
+.B bump_version()
+event in the local VAS, providing sub-second propagation of inventory
+changes to the upper VAS without waiting for the
+.BR vaf (8)
+daemon's next CHECK cycle.
+.PP
+.B vaf-register
+reads the same configuration as
+.BR vaf (8)
+from
+.I /etc/vaf/vaf.conf
+and
+.IR /etc/vaf/vaf.conf.d/ .
+.SH SEE ALSO
+.BR vaf (8),
+.BR vas (8)
+.SH AUTHOR
+Gabriel Navia <correos@gabrielnav.es>

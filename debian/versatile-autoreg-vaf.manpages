@@ -1,0 +1,5 @@
+debian/man/vaf.8
+debian/man/vaf-register.8
+debian/man/vaf-sub.8
+debian/man/vaf-sub-manager.8
+debian/man/vaf-sub-instance.8
