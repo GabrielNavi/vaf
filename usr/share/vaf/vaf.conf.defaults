@@ -2,42 +2,51 @@
 # Configuración activa:    /etc/vaf/vaf.conf
 # Sobreescrituras:         /etc/vaf/vaf.conf.d/*.conf
 
-# Clave de agregación. El inventario local se publica en el VAS superior como:
-#   extra_imperative.VAF_<KEY> = {"clients": [...]}
-# Obligatorio. Debe ser única por nodo VAF en la federación.
+# Clave de agregación. Vacío = hostname -s del equipo.
 KEY=
 
-# URL del VAS local — fuente del inventario de clientes.
-LOCAL_VAS_HOST=http://127.0.0.1:8000
-
-# URL del VAS superior — destino del registro de este nodo VAF.
-# Obligatorio. El nodo VAF se registra aquí como cliente normal con
-# extra_imperative.VAF_<KEY> conteniendo el inventario local.
+# URL del VAS superior. Obligatorio.
 UPPER_VAS_HOST=
+UPPER_VAS_SCHEME=http
 
-# Filtro de clientes consultados al VAS local:
-#   active    → solo clientes activos
-#   inactive  → solo clientes inactivos
-#   archived  → solo clientes archivados
-#   all       → todos los clientes
+# Filtro de clientes del VAS local.
+# active | inactive | archived | all
 FILTER=active
 
-# Clave extra enviada al VAS local como ?extra_key=GLOBAL_KEY.
-# Vacío = inventario completo.
+# Filtro por clave extra en VAS local.
 GLOBAL_KEY=
+
+# Claves a materializar como <KEY>_clients.json en STATE_DIR.
+LOCAL_KEY_LIST=
 
 # Temporización
 CHECK_SECONDS=300
-# Intervalo entre señales de liveness. Vacío = igual a CHECK_SECONDS (backwards compatible).
-# CHECK_SECONDS < HEARTBEAT_SECONDS → sync frecuente, heartbeat lento.
-# CHECK_SECONDS > HEARTBEAT_SECONDS → liveness frecuente, sync lento.
-# HEARTBEAT_SECONDS=300
+# HEARTBEAT_SECONDS=300   (vacío = igual a CHECK_SECONDS)
 RETRY_SECONDS=60
 
-# Sincronización del inventario del VAS superior en upper_clients.json.
-# false por defecto. Activar si el nodo necesita conocer el estado de la federación.
+# Sincronizar inventario del VAS superior en upper_clients.json.
 SYNC_UPPER=false
 
-# Puerto UDP de escucha para notificaciones push del VAS local (como VAL-Aware).
-# 0 = desactivado.
-BUMP_LISTEN_PORT=0
+# Hooks de consumo del inventario local (rol VAL)
+HOOKS_LOCAL_DIR=/etc/vaf/hooks_local.d
+DISPATCH_STDIN=true
+HOOK_TIMEOUT_SECONDS=30
+
+# Extras hacia el VAS superior (rol VAC)
+EXTRAS_ENABLED=true
+EXTRAS_TTL=86400
+EXTRAS_IMPERATIVE_HOOKS_DIR=/etc/vaf/extras_imperative.d
+EXTRAS_INFORMATIVE_HOOKS_DIR=/etc/vaf/extras_informative.d
+
+# Paralelización de sub-instancias
+# both | only_main | only_parallel
+PARALLEL_MODE=both
+
+# VAT
+USE_VAT=false
+# VAT_PRESET=
+
+# Log
+# LOG_LEVEL: no | normal | debug
+# LOG_LEVEL=normal
+# LOG_FILE=

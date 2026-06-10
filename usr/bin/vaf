@@ -1,19 +1,16 @@
 #!/bin/bash
 # vaf — Versatile Autoregistration Federated
 #
-# Daemon que combina VAC y VAL:
+# Daemon que combina VAC y VAL para federar un VAS local en una jerarquía.
+# Requiere VAS instalado en el mismo host.
 #
-#   Como VAC: se registra en UPPER_VAS_HOST con su propio UUID, heartbeat
-#             periódico y selfcheck de identidad (hostname/IP/MAC). Verifica
-#             su registro con GET /clients/{uuid} (refresh_upper_identity).
+#   Rol VAL: monitoriza LOCAL_VAS; cuando el inventario cambia descarga
+#            GET /clients, materializa LOCAL_KEY_LIST y dispara hooks_local.d/.
 #
-#   Como VAL: monitoriza LOCAL_VAS_HOST; cuando el inventario local cambia
-#             (GET /version), descarga GET /clients con FILTER (status) y
-#             GLOBAL_KEY (extra_key), y actualiza extra_imperative.VAF_<KEY>
-#             en el VAS superior.
-#
-#   Con SYNC_UPPER=true: descarga también el inventario del VAS superior en
-#             /var/lib/vaf/upper_clients.json para consumo local.
+#   Rol VAC: se registra en UPPER_VAS_HOST con su propio UUID; publica el
+#            inventario local como extra_imperative.VAF_<KEY>_clients, añade
+#            extras de extras_imperative.d/ y extras_informative.d/, y mantiene
+#            heartbeat periódico.
 #
 # Journalctl: journalctl -u vaf -f
 #   Filtrar errores: journalctl -u vaf | grep '\[VAF-ERROR\]'
@@ -27,7 +24,6 @@ source /usr/lib/vaf/vaf-common.sh
 # Inicialización
 # ---------------------------------------------------------------------------
 load_all_conf
-: "${HEARTBEAT_SECONDS:=$CHECK_SECONDS}"   # vacío en conf → mismo intervalo que CHECK
 
 mkdir -p "$STATE_DIR"
 
@@ -42,7 +38,6 @@ fi
 
 CLIENT_ID="$(tr -d '[:space:]' < "$ID_FILE")"
 
-# Validar formato UUID RFC 4122; regenerar si está corrupto.
 _uuid_valid_re='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
 if [[ ! "$CLIENT_ID" =~ $_uuid_valid_re ]]; then
     log "[WARN] UUID inválido en $ID_FILE ('$CLIENT_ID'). Regenerando..."
@@ -50,11 +45,6 @@ if [[ ! "$CLIENT_ID" =~ $_uuid_valid_re ]]; then
     chmod 600 "$ID_FILE"
     CLIENT_ID="$(tr -d '[:space:]' < "$ID_FILE")"
     log "UUID regenerado: $CLIENT_ID"
-fi
-
-if [[ -z "$KEY" ]]; then
-    log "ERROR: KEY no está definida en vaf.conf. Abortando."
-    exit 1
 fi
 
 case "$FILTER" in
@@ -66,61 +56,31 @@ case "$FILTER" in
 esac
 
 log "=== Iniciando VAF ==="
-log "KEY:             VAF_${KEY}"
-log "LOCAL_VAS_HOST:  $LOCAL_VAS_HOST"
-log "UPPER_VAS_HOST:  ${UPPER_VAS_HOST:-(no definido)}"
-log "FILTER:          $FILTER"
-log "GLOBAL_KEY:      ${GLOBAL_KEY:-(ninguna)}"
-log "CHECK:           ${CHECK_SECONDS}s"
-log "HEARTBEAT:       ${HEARTBEAT_SECONDS}s"
-log "RETRY:           ${RETRY_SECONDS}s"
-log "SYNC_UPPER:      $SYNC_UPPER"
-log "BUMP_LISTEN_PORT:${BUMP_LISTEN_PORT} ($([ "$BUMP_LISTEN_PORT" != "0" ] && echo 'activo' || echo 'desactivado'))"
-log "USE_VAT:         $USE_VAT"
-[[ "$USE_VAT" == "true" ]] && log "VAT_PRESET:      $VAT_PRESET"
-log "UUID:            $CLIENT_ID"
+log "KEY:              VAF_${KEY}_clients"
+log "LOCAL_VAS_HOST:   $LOCAL_VAS_HOST"
+log "UPPER_VAS_HOST:   ${UPPER_VAS_SCHEME}://${UPPER_VAS_HOST:-(no definido)}"
+log "FILTER:           $FILTER"
+log "GLOBAL_KEY:       ${GLOBAL_KEY:-(ninguna)}"
+log "LOCAL_KEY_LIST:   ${LOCAL_KEY_LIST:-(ninguna)}"
+log "CHECK:            ${CHECK_SECONDS}s"
+log "HEARTBEAT:        ${HEARTBEAT_SECONDS}s"
+log "RETRY:            ${RETRY_SECONDS}s"
+log "EXTRAS:           $EXTRAS_ENABLED"
+log "SYNC_UPPER:       $SYNC_UPPER"
+log "UUID:             $CLIENT_ID"
 
 # Variables de ciclo
 LOC_HOST=""
 LOC_IP=""
 LOC_MAC=""
+EXTRA_IMP_BASE=""
+EXTRA_INF=""
 
-# ---------------------------------------------------------------------------
-# Bump listener (notificación push desde VAS local, como VAL-Aware)
-# ---------------------------------------------------------------------------
-BUMP_PID=""
-BUMP_FIFO="/var/run/vaf/bump.fifo"
-
-_bump_received=false
-interruptible_sleep() {
-    _bump_received=false
-    if [[ "$BUMP_LISTEN_PORT" != "0" ]]; then
-        if read -t "$1" -r _bump_data <&3 2>/dev/null; then
-            _bump_received=true
-        fi
-    else
-        sleep "$1"
-    fi
-}
-
-cleanup() {
-    [[ -n "$BUMP_PID" ]] && kill "$BUMP_PID" 2>/dev/null || true
-    [[ -e "$BUMP_FIFO" ]] && rm -f "$BUMP_FIFO" || true
-    exit 0
-}
+cleanup() { exit 0; }
 trap cleanup SIGTERM SIGINT
 
-if [[ "$BUMP_LISTEN_PORT" != "0" ]]; then
-    mkdir -p "$(dirname "$BUMP_FIFO")"
-    mkfifo "$BUMP_FIFO" 2>/dev/null || true
-    exec 3<>"$BUMP_FIFO"
-    nc -u -l -k -p "$BUMP_LISTEN_PORT" >"$BUMP_FIFO" &
-    BUMP_PID=$!
-    log "[BUMP] Escuchando UDP en puerto $BUMP_LISTEN_PORT (PID $BUMP_PID)"
-fi
-
 # ---------------------------------------------------------------------------
-# Fase de arranque: esperar UPPER_VAS_HOST y registro inicial bloqueante
+# Arranque: esperar UPPER_VAS y registro inicial bloqueante
 # ---------------------------------------------------------------------------
 while [[ -z "$UPPER_VAS_HOST" ]]; do
     log "UPPER_VAS_HOST no definido. Esperando ${RETRY_SECONDS}s."
@@ -128,40 +88,34 @@ while [[ -z "$UPPER_VAS_HOST" ]]; do
     load_all_conf
 done
 
-log "[STARTUP] Registrando nodo en VAS superior (fase inicial)..."
+log "[STARTUP] Registro inicial en VAS superior..."
 
+LOC_HOST="$(get_hostname)"
+LOC_IP="$(get_ip)"
+LOC_MAC="$(get_mac)"
+
+collect_extras_imperative
 if fetch_local_clients; then
-    STARTUP_EXTRA="$(build_vaf_extra)"
-    # VAT: sanear el extra antes de enviarlo al VAS superior (direction=upstream)
-    if [[ "$USE_VAT" == "true" && -n "$VAT_PRESET" ]]; then
-        if command -v vat-operate &>/dev/null; then
-            STARTUP_EXTRA="$(echo "$STARTUP_EXTRA" | vat-operate \
-                --source-component VAF --direction upstream \
-                --preset "$VAT_PRESET" 2>/dev/null)" \
-            && log "[VAT] Extra de arranque saneado (upstream) con preset '$VAT_PRESET'" \
-            || log "[VAT-WARN] vat-operate falló en arranque. Extra sin sanear."
-        else
-            log "[VAT-WARN] USE_VAT=true pero vat-operate no encontrado."
-        fi
+    STARTUP_IMP="$(build_vaf_extra "$EXTRA_IMP_BASE")"
+    if [[ "$USE_VAT" == "true" && -n "$VAT_PRESET" ]] && command -v vat-operate &>/dev/null; then
+        STARTUP_IMP="$(echo "$STARTUP_IMP" | vat-operate \
+            --source-component VAF --direction upstream \
+            --preset "$VAT_PRESET" 2>/dev/null)" \
+        && log "[VAT] Extra de arranque saneado (upstream) con preset '$VAT_PRESET'" \
+        || log "[VAT-WARN] vat-operate falló en arranque. Extra sin sanear."
     fi
 else
-    STARTUP_EXTRA=""
-    log "[STARTUP] Inventario local no disponible. Registrando sin sobrescribir VAF_${KEY} existente."
+    STARTUP_IMP="$(build_vaf_extra "$EXTRA_IMP_BASE")"
+    log "[STARTUP] Inventario local no disponible. Registrando sin VAF_${KEY}_clients actual."
 fi
 
 while true; do
-    LOC_HOST="$(get_hostname)"
-    LOC_IP="$(get_ip)"
-    LOC_MAC="$(get_mac)"
-
-    if register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$STARTUP_EXTRA" "" > /dev/null; then
-        save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$STARTUP_EXTRA" "" || log "[WARN] No se pudo guardar identity.json; continuando."
+    if register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$STARTUP_IMP" "" > /dev/null; then
+        save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$STARTUP_IMP" "" \
+            || log "[WARN] No se pudo guardar identity.json; continuando."
         log "[STARTUP] Registro inicial completado."
-
-        # Confirmar con GET /clients/{uuid} que el VAS superior almacenó el extra
         refresh_upper_identity || log "[STARTUP] No se pudo refrescar identity desde UPPER_VAS."
 
-        # Guardar versión local actual para no repetir sincronización en el primer ciclo
         local_ver="$(get_local_version)"
         if [[ -n "$local_ver" && "$local_ver" =~ ^[0-9]+$ ]]; then
             write_version "$local_ver"
@@ -180,7 +134,7 @@ while true; do
 done
 
 # ---------------------------------------------------------------------------
-# Temporizadores y sleep base
+# Temporizadores
 # ---------------------------------------------------------------------------
 LAST_CHECK_TS=$(date +%s)
 LAST_HB_TS=$(date +%s)
@@ -189,7 +143,7 @@ if (( CHECK_SECONDS <= HEARTBEAT_SECONDS )); then
 else
     SLEEP_INTERVAL=$HEARTBEAT_SECONDS
 fi
-log "SLEEP_BASE:      ${SLEEP_INTERVAL}s"
+log "SLEEP_BASE: ${SLEEP_INTERVAL}s"
 
 # ---------------------------------------------------------------------------
 # Bucle principal
@@ -197,21 +151,19 @@ log "SLEEP_BASE:      ${SLEEP_INTERVAL}s"
 while true; do
     now=$(date +%s)
 
-    # Recopilar datos de red una vez por ciclo (barato; necesario para ambos bloques)
     LOC_HOST="$(get_hostname)"
     LOC_IP="$(get_ip)"
     LOC_MAC="$(get_mac)"
 
-    # Un BUMP desde el VAS local fuerza el bloque CHECK sin esperar el temporizador
-    [[ "$_bump_received" == "true" ]] && LAST_CHECK_TS=0
-
-    # --- Bloque CHECK: versión VAS local + sync a UPPER (cada CHECK_SECONDS o BUMP) ---
+    # --- Bloque CHECK: versión LOCAL_VAS + extras imperativos (cada CHECK_SECONDS) ---
     if (( now - LAST_CHECK_TS >= CHECK_SECONDS )); then
-        log_debug "--- Ciclo de check local: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ---"
+        log_debug "--- CHECK: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ---"
 
+        # Extras imperativos del usuario
+        collect_extras_imperative
+
+        # Versión VAS local
         local_version="$(tr -d '[:space:]' < "$VERSION_FILE" 2>/dev/null || echo "0")"
-        log_debug "[LOCAL-VER] Versión guardada: $local_version"
-
         remote_local_version="$(get_local_version)"
 
         if [[ -z "$remote_local_version" ]]; then
@@ -219,61 +171,62 @@ while true; do
             sleep "$RETRY_SECONDS"
             continue
         fi
-
         if [[ ! "$remote_local_version" =~ ^[0-9]+$ ]]; then
-            log "[VAF-ERROR] Versión local inválida: '$remote_local_version'. Reintentando en ${RETRY_SECONDS}s."
+            log "[VAF-ERROR] Versión local inválida: '$remote_local_version'."
             sleep "$RETRY_SECONDS"
             continue
         fi
 
+        local_changed=false
         if [[ "$remote_local_version" != "$local_version" ]]; then
+            local_changed=true
             log "[SYNC] Cambio en VAS local: $local_version → $remote_local_version"
 
-            if fetch_local_clients; then
-                NEW_IMP="$(build_vaf_extra)"
-                # VAT: sanear el extra antes de enviarlo al VAS superior (direction=upstream)
-                if [[ "$USE_VAT" == "true" && -n "$VAT_PRESET" ]]; then
-                    if command -v vat-operate &>/dev/null; then
-                        NEW_IMP="$(echo "$NEW_IMP" | vat-operate \
-                            --source-component VAF --direction upstream \
-                            --preset "$VAT_PRESET" 2>/dev/null)" \
-                        && log "[VAT] Inventario upstream saneado con preset '$VAT_PRESET'" \
-                        || log "[VAT-WARN] vat-operate falló. Extra sin sanear."
-                    else
-                        log "[VAT-WARN] USE_VAT=true pero vat-operate no encontrado."
-                    fi
-                fi
-                log_debug "[SYNC] Actualizando VAF_${KEY} en VAS superior..."
-                if register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$NEW_IMP" "" > /dev/null; then
-                    save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$NEW_IMP" "" || log "[WARN] No se pudo guardar identity.json; continuando."
-                    write_version "$remote_local_version"
-                    log "[SYNC] VAF_${KEY} actualizado. Versión local: $remote_local_version"
-                    refresh_upper_identity || log "[IDENTITY] No se pudo verificar el extra en UPPER_VAS."
-                    LAST_HB_TS=$now   # el registro actualiza last_seen en UPPER_VAS
-                else
-                    log "[VAF-ERROR] No se pudo actualizar en VAS superior. Reintentando en ${RETRY_SECONDS}s."
-                    sleep "$RETRY_SECONDS"
-                    continue
-                fi
-            else
+            if ! fetch_local_clients; then
                 log "[VAF-ERROR] No se pudo descargar inventario local. Reintentando en ${RETRY_SECONDS}s."
                 sleep "$RETRY_SECONDS"
                 continue
             fi
+            materialize_keys
+            dispatch_hooks_local "$remote_local_version"
+            write_version "$remote_local_version"
         else
             log_debug "[LOCAL-VER] Sin cambios en VAS local ($local_version)."
         fi
 
+        # Construir extra_imperative completo (VAF_KEY_clients + extras usuario)
+        NEW_IMP="$(build_vaf_extra "$EXTRA_IMP_BASE")"
+
+        if [[ "$USE_VAT" == "true" && -n "$VAT_PRESET" ]] && command -v vat-operate &>/dev/null; then
+            NEW_IMP="$(echo "$NEW_IMP" | vat-operate \
+                --source-component VAF --direction upstream \
+                --preset "$VAT_PRESET" 2>/dev/null)" \
+            || log "[VAT-WARN] vat-operate falló. Extra sin sanear."
+        fi
+
+        # Registrar si la versión cambió o si la identidad/extras cambiaron
+        if $local_changed || ! selfcheck_imp "$NEW_IMP"; then
+            log_debug "[SYNC] Actualizando registro en VAS superior..."
+            if register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$NEW_IMP" "" > /dev/null; then
+                save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$NEW_IMP" "" \
+                    || log "[WARN] No se pudo guardar identity.json; continuando."
+                refresh_upper_identity || log "[IDENTITY] No se pudo verificar el extra en UPPER_VAS."
+                LAST_HB_TS=$now
+            else
+                log "[VAF-ERROR] No se pudo actualizar en VAS superior. Reintentando en ${RETRY_SECONDS}s."
+                sleep "$RETRY_SECONDS"
+                continue
+            fi
+        fi
+
+        # SYNC_UPPER: descargar inventario del VAS superior si cambió
         if [[ "$SYNC_UPPER" == "true" ]]; then
             upper_version="$(tr -d '[:space:]' < "$UPPER_VERSION_FILE" 2>/dev/null || echo "0")"
             remote_upper_version="$(get_upper_version)"
-
             if [[ -n "$remote_upper_version" && "$remote_upper_version" =~ ^[0-9]+$ ]]; then
                 if [[ "$remote_upper_version" != "$upper_version" ]]; then
                     log "[UPPER] Nueva versión en VAS superior: $upper_version → $remote_upper_version"
-                    if download_upper_clients; then
-                        write_upper_version "$remote_upper_version"
-                    fi
+                    download_upper_clients && write_upper_version "$remote_upper_version"
                 else
                     log_debug "[UPPER] Sin cambios en VAS superior ($upper_version)."
                 fi
@@ -283,39 +236,76 @@ while true; do
         LAST_CHECK_TS=$now
     fi
 
-    # --- Bloque HB: selfcheck de identidad + liveness UPPER_VAS (cada HEARTBEAT_SECONDS) ---
+    # --- Bloque HEARTBEAT: extras informativos + liveness UPPER_VAS ---
     if (( now - LAST_HB_TS >= HEARTBEAT_SECONDS )); then
-        if load_identity; then
-            CURRENT_IMP="$IDENTITY_IMP"
-        else
-            CURRENT_IMP=""
-        fi
+        log_debug "--- HEARTBEAT: $(date -u '+%Y-%m-%d %H:%M:%S UTC') ---"
 
+        # Extras informativos del usuario
+        collect_extras_informative
+
+        # Selfcheck identidad (host/ip/mac)
         if ! selfcheck_local; then
-            if ! register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$CURRENT_IMP" "" > /dev/null; then
+            load_identity || true
+            if register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" \
+                    "${IDENTITY_IMP:-}" "$EXTRA_INF" > /dev/null; then
+                save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" \
+                    "${IDENTITY_IMP:-}" "$EXTRA_INF" \
+                    || log "[WARN] No se pudo guardar identity.json; continuando."
+                refresh_upper_identity || log "[IDENTITY] No se pudo refrescar identity."
+            else
                 log "[VAF-ERROR] No se pudo contactar con VAS superior. Reintentando en ${RETRY_SECONDS}s."
                 sleep "$RETRY_SECONDS"
                 continue
             fi
-            save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$CURRENT_IMP" "" || log "[WARN] No se pudo guardar identity.json; continuando."
-            refresh_upper_identity || log "[IDENTITY] No se pudo refrescar identity desde UPPER_VAS."
-            LAST_CHECK_TS=$now   # el registro confirma identidad
+        elif [[ -n "$EXTRA_INF" ]]; then
+            # Informative cambió o existe: registrar sin tocar IMP (COALESCE)
+            load_identity || true
+            local_inf="${IDENTITY_INF:-}"
+            if [[ "$EXTRA_INF" != "$local_inf" ]]; then
+                log_debug "[HEARTBEAT] extra_informative cambió — actualizando."
+                register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" \
+                    "" "$EXTRA_INF" > /dev/null \
+                && save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" \
+                    "${IDENTITY_IMP:-}" "$EXTRA_INF" \
+                || log "[WARN] No se pudo actualizar extra_informative."
+            else
+                if ! heartbeat_client; then
+                    log "[HEARTBEAT] Sin respuesta — re-registrando."
+                    load_identity || true
+                    if register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" \
+                            "${IDENTITY_IMP:-}" "$EXTRA_INF" > /dev/null; then
+                        save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" \
+                            "${IDENTITY_IMP:-}" "$EXTRA_INF" \
+                            || log "[WARN] No se pudo guardar identity.json; continuando."
+                        refresh_upper_identity || log "[IDENTITY] No se pudo refrescar identity."
+                    else
+                        log "[VAF-ERROR] No se pudo contactar con VAS superior. Reintentando en ${RETRY_SECONDS}s."
+                        sleep "$RETRY_SECONDS"
+                        continue
+                    fi
+                fi
+            fi
         else
             if ! heartbeat_client; then
-                log "[HEARTBEAT] Sin respuesta o nodo no registrado — re-registrando."
-                if ! register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$CURRENT_IMP" "" > /dev/null; then
+                log "[HEARTBEAT] Sin respuesta — re-registrando."
+                load_identity || true
+                if register_client "$LOC_HOST" "$LOC_IP" "$LOC_MAC" \
+                        "${IDENTITY_IMP:-}" "" > /dev/null; then
+                    save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" \
+                        "${IDENTITY_IMP:-}" "" \
+                        || log "[WARN] No se pudo guardar identity.json; continuando."
+                    refresh_upper_identity || log "[IDENTITY] No se pudo refrescar identity."
+                else
                     log "[VAF-ERROR] No se pudo contactar con VAS superior. Reintentando en ${RETRY_SECONDS}s."
                     sleep "$RETRY_SECONDS"
                     continue
                 fi
-                save_identity "$LOC_HOST" "$LOC_IP" "$LOC_MAC" "$CURRENT_IMP" "" || log "[WARN] No se pudo guardar identity.json; continuando."
-                refresh_upper_identity || log "[IDENTITY] No se pudo refrescar identity desde UPPER_VAS."
-                LAST_CHECK_TS=$now
             fi
         fi
+
         LAST_HB_TS=$now
     fi
 
-    log_debug "--- Próxima comprobación en ${SLEEP_INTERVAL}s. ---"
-    interruptible_sleep "$SLEEP_INTERVAL"
+    log_debug "--- Próximo ciclo en ${SLEEP_INTERVAL}s ---"
+    sleep "$SLEEP_INTERVAL"
 done
