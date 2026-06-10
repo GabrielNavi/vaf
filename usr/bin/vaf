@@ -86,6 +86,8 @@ while [[ -z "$UPPER_VAS_HOST" ]]; do
     log "UPPER_VAS_HOST no definido. Esperando ${RETRY_SECONDS}s."
     sleep "$RETRY_SECONDS"
     load_all_conf
+    [[ -n "$UPPER_VAS_HOST" ]] && \
+        log "UPPER_VAS_HOST resuelto: ${UPPER_VAS_SCHEME}://${UPPER_VAS_HOST}"
 done
 
 log "[STARTUP] Registro inicial en VAS superior..."
