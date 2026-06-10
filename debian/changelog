@@ -1,3 +1,12 @@
+versatile-autoreg-vaf (0.1-9) unstable; urgency=low
+
+  * vaf-common.sh: download_upper_clients() aplica vat-operate
+    --source-component VAF --direction downstream sobre upper_clients.json
+    cuando USE_VAT=true, antes de mv al fichero definitivo. El changelog
+    de 0.1-8 lo prometía pero el código no lo implementaba.
+
+ -- Gabriel Navia <correos@gabrielnav.es>  Wed, 10 Jun 2026 13:00:00 +0200
+
 versatile-autoreg-vaf (0.1-8) unstable; urgency=low
 
   * vaf-common.sh: save_identity() usa fichero temporal con PID

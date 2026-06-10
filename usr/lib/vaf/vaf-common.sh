@@ -621,6 +621,14 @@ download_upper_clients() {
         "${UPPER_VAS_SCHEME}://${UPPER_VAS_HOST}/clients" -o "$TMP_UPPER_CLIENTS" 2>/dev/null; then
         local count
         count="$(jq '.clients | length' "$TMP_UPPER_CLIENTS" 2>/dev/null || echo '?')"
+        if [[ "$USE_VAT" == "true" && -n "$VAT_PRESET" ]] && command -v vat-operate &>/dev/null; then
+            local vat_out
+            vat_out="$(vat-operate --source-component VAF --direction downstream \
+                --preset "$VAT_PRESET" < "$TMP_UPPER_CLIENTS" 2>/dev/null)" \
+            && echo "$vat_out" > "$TMP_UPPER_CLIENTS" \
+            && log "[VAT] upper_clients.json saneado (downstream) con preset '$VAT_PRESET'" \
+            || log "[VAT-WARN] vat-operate falló. upper_clients.json sin sanear."
+        fi
         mv "$TMP_UPPER_CLIENTS" "$UPPER_CLIENTS_FILE"
         log "[UPPER] Inventario superior: $count nodo(s)"
         return 0
