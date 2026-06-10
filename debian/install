@@ -4,4 +4,4 @@ usr/lib/vaf/vaf-common.sh usr/lib/vaf/
 etc/vaf/vaf.conf etc/vaf/
 lib/systemd/system/vaf.service lib/systemd/system/
 usr/share/vaf/vaf.conf.defaults usr/share/vaf/
-usr/share/vaf/hooks.d.examples/local-vaf-register usr/share/vaf/hooks.d.examples/
+usr/share/vaf/hooks.d/local-vaf-register usr/share/vaf/hooks.d/

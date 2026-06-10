@@ -7,12 +7,14 @@ Section: admin
 
 Package: versatile-autoreg-vaf
 Architecture: all
-Depends: bash, curl, jq, uuid-runtime, iproute2
-Recommends: netcat-openbsd
+Depends: versatile-autoreg-vas, bash, curl, jq, uuid-runtime, iproute2
 Suggests: versatile-autoreg-vat
 Description: Federación de Autorregistro Versátil (VAF)
  Daemon que combina VAC y VAL para federar múltiples servidores VAS en
- una jerarquía. Se registra en un VAS superior como cliente (VAC) y
- monitoriza el inventario del VAS local para publicarlo como
- extra_imperative.VAF_<KEY> (VAL). Permite al VAS superior agregar los
- sub-inventarios de múltiples nodos VAF como campos de sus clientes.
+ una jerarquía. Requiere VAS instalado en el mismo host. Agrega el
+ inventario local (rol VAL) y lo publica como extra_imperative en un VAS
+ superior (rol VAC) bajo la clave VAF_<KEY>_clients. Soporta hooks de
+ doble sentido: hooks_local.d para consumir el inventario y
+ extras_imperative.d / extras_informative.d para enriquecer el registro
+ en el VAS superior. Admite sub-instancias para federar a múltiples VAS
+ superiores desde una misma fuente.

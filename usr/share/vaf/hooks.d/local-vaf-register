@@ -1,12 +1,11 @@
 #!/bin/bash
 # local-vaf-register — Hook para el VAS local.
 #
-# Instalar en /etc/vas/hooks.d/ del servidor VAS local:
-#   cp /usr/share/vaf/hooks.d.examples/local-vaf-register /etc/vas/hooks.d/
-#   chmod +x /etc/vas/hooks.d/local-vaf-register
+# Instalado automáticamente en /etc/vas/hooks.d/ por el postinst de VAF.
 #
-# Cuando el VAS local ejecuta bump_version(), este hook llama a vaf-register,
-# que actualiza inmediatamente extra_imperative.VAF_<KEY> en el VAS superior.
+# Cuando el VAS local ejecuta bump_version(), este hook llama a vaf-register
+# (instancia principal) y a todas las sub-instancias habilitadas, que actualizan
+# inmediatamente VAF_<KEY>_clients en sus respectivos VAS superiores.
 # Así el VAS superior queda sincronizado en milisegundos, sin esperar al
 # próximo ciclo del daemon vaf (CHECK_SECONDS).
 #
@@ -21,3 +20,8 @@ if ! command -v vaf-register >/dev/null 2>&1; then
 fi
 
 vaf-register
+
+for _sub_dir in /etc/vaf/vaf.sub/*/; do
+    [ -f "${_sub_dir}.enabled" ] || continue
+    vaf-register --instance "$(basename "$_sub_dir")"
+done

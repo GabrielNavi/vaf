@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    remove|purge)
+        rm -f /etc/vas/hooks.d/local-vaf-register
+        ;;
+esac
+
+if [ "$1" = "purge" ]; then
+    rm -rf /etc/vaf /var/lib/vaf /var/log/vaf
+fi
+
+#DEBHELPER#

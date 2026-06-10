@@ -1,27 +1,29 @@
 #!/bin/sh
 set -e
 
-echo "[VAF] Ejecutando postinst..."
+case "$1" in
+    configure)
+        mkdir -p /etc/vaf/vaf.conf.d \
+                 /etc/vaf/hooks_local.d \
+                 /etc/vaf/extras_imperative.d \
+                 /etc/vaf/extras_informative.d \
+                 /etc/vaf/vaf.sub \
+                 /var/lib/vaf/sub \
+                 /var/log/vaf
 
-mkdir -p /etc/vaf
-mkdir -p /etc/vaf/vaf.conf.d
-mkdir -p /var/lib/vaf
+        if [ ! -f /etc/vaf/vaf-id ]; then
+            uuidgen > /etc/vaf/vaf-id
+            chmod 600 /etc/vaf/vaf-id
+        fi
 
-if [ ! -f /etc/vaf/vaf-id ]; then
-    uuidgen > /etc/vaf/vaf-id
-    chmod 600 /etc/vaf/vaf-id
-fi
+        # Instalación fresca: auto-instalar hook en VAS local
+        if [ -z "${2:-}" ] && [ -d /etc/vas/hooks.d ]; then
+            if [ ! -e /etc/vas/hooks.d/local-vaf-register ]; then
+                ln -s /usr/share/vaf/hooks.d/local-vaf-register \
+                      /etc/vas/hooks.d/local-vaf-register
+            fi
+        fi
+        ;;
+esac
 
-systemctl daemon-reload || true
-systemctl enable vaf.service || true
-
-if [ "$1" = "configure" ]; then
-    if [ -n "${2:-}" ]; then
-        systemctl restart vaf.service || true
-    else
-        systemctl start vaf.service || true
-    fi
-fi
-
-echo "[VAF] Instalacion completada."
-exit 0
+#DEBHELPER#
