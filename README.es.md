@@ -44,7 +44,8 @@ VAS (superior) ◄── POST /register, /heartbeat ── VAF ──► GET /ve
 | `versatile-autoreg-vas` | [vas](https://github.com/GabrielNavi/vas) | Servidor de inventario |
 | `versatile-autoreg-vac` | [vac](https://github.com/GabrielNavi/vac) | Cliente de autoregistro |
 | `versatile-autoreg-val` | [val](https://github.com/GabrielNavi/val) | Consumidor genérico con hooks |
-| `versatile-autoreg-vaf` | [vaf](https://github.com/GabrielNavi/vaf) ← *este* | Federación de servidores |
+| `versatile-autoreg-vaf` | [vaf](https://github.com/GabrielNavi/vaf) ← *este* | Federación de servidores (beta) |
+| `versatile-autoreg-vat` | [vat](https://github.com/GabrielNavi/vat) | Transformador de inventarios (experimental) |
 
 **Despliegue típico** — jerarquía de tres niveles:
 

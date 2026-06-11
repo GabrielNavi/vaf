@@ -46,7 +46,8 @@ VAS (upper) ◄── POST /register, /heartbeat ── VAF ──► GET /versi
 | `versatile-autoreg-vas` | [vas](https://github.com/GabrielNavi/vas) | Inventory server |
 | `versatile-autoreg-vac` | [vac](https://github.com/GabrielNavi/vac) | Autoregistration client |
 | `versatile-autoreg-val` | [val](https://github.com/GabrielNavi/val) | Generic consumer with hooks |
-| `versatile-autoreg-vaf` | [vaf](https://github.com/GabrielNavi/vaf) ← *this* | Server federation |
+| `versatile-autoreg-vaf` | [vaf](https://github.com/GabrielNavi/vaf) ← *this* | Server federation (beta) |
+| `versatile-autoreg-vat` | [vat](https://github.com/GabrielNavi/vat) | Inventory Transformer (experimental) |
 
 **Typical deployment** — three-level hierarchy:
 
