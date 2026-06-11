@@ -146,8 +146,10 @@ Cada CHECK_SECONDS  (o con bump UDP):
   collect_extras_imperative()
   GET /version (VAS local)
   Nueva versión → GET /clients → build_vaf_extra()
+                  → [opcional: VAT --direction upstream] normalizar extras
                   → POST /register (VAS superior) con VAF_<KEY>_clients
-                  → materialize_keys() → dispatch_hooks_local()
+                  → materialize_keys() → [opcional: VAT --direction downstream]
+                  → dispatch_hooks_local()
 
 Cada HEARTBEAT_SECONDS:
   selfcheck vs identity.json
@@ -157,7 +159,9 @@ Cada HEARTBEAT_SECONDS:
 
 El bloque CHECK actúa como VAL (detecta cambios en el inventario local y los publica). El bloque HB actúa como VAC (mantiene el nodo activo en el VAS superior). Un registro exitoso en cualquier bloque resetea el temporizador del otro.
 
-Más información: [Flujo de operación](https://github.com/GabrielNavi/vaf/wiki/ES_Flujo)
+VAT (Transformador de Autoregistro Versátil) puede normalizar el inventario antes de enviarlo upstream y filtrar la réplica de la BD antes de almacenarla localmente. Véase la [documentación VAT](https://github.com/GabrielNavi/vat) para la configuración.
+
+Más información: [Flujo de operación](https://github.com/GabrielNavi/vaf/wiki/ES_Federacion)
 
 ---
 

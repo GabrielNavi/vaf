@@ -148,8 +148,10 @@ Every CHECK_SECONDS  (or on UDP bump):
   collect_extras_imperative()
   GET /version (local VAS)
   Changed → GET /clients → build_vaf_extra()
+            → [optional: VAT --direction upstream] normalize extras
             → POST /register (upper VAS) with VAF_<KEY>_clients
-            → materialize_keys() → dispatch_hooks_local()
+            → materialize_keys() → [optional: VAT --direction downstream]
+            → dispatch_hooks_local()
 
 Every HEARTBEAT_SECONDS:
   selfcheck vs identity.json
@@ -159,7 +161,9 @@ Every HEARTBEAT_SECONDS:
 
 The CHECK block acts as VAL (watches local VAS inventory changes and publishes upstream). The HB block acts as VAC (keeps the node alive in the upper VAS). A successful registration in either block resets the other timer.
 
-More details: [Operation Flow](https://github.com/GabrielNavi/vaf/wiki/EN_Operation)
+VAT (Versatile Autoregistration Transformer) can normalize the inventory before sending upstream and filter the database replica before storing locally. See [VAT documentation](https://github.com/GabrielNavi/vat) for configuration.
+
+More details: [Operation Flow](https://github.com/GabrielNavi/vaf/wiki/EN_Federation)
 
 ---
 
