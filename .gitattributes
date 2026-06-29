@@ -1,0 +1,7 @@
+# Forzar LF en todos los ficheros de texto para evitar \r\n en Linux
+* text=auto eol=lf
+
+# Binarios: sin conversión
+*.pem binary
+*.png binary
+*.jpg binary

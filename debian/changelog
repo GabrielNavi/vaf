@@ -1,3 +1,14 @@
+versatile-autoreg-vaf (0.1.11) unstable; urgency=low
+
+  * debian/: vaf.service y vaf-sub.service movidos de usr/lib/systemd/system/
+    a debian/versatile-autoreg-vaf.{vaf,vaf-sub}.service; eliminadas las
+    entradas correspondientes de debian/install. debhelper gestiona
+    automáticamente enable/start/stop/disable vía dh_installsystemd.
+  * .gitattributes: añadido para forzar LF en todos los ficheros de texto.
+  * usr/share/vaf/hooks.d/local-vaf-register: modo 755 en git.
+
+ -- Gabriel Navia <correos@gabrielnav.es>  Mon, 29 Jun 2026 12:00:00 +0200
+
 versatile-autoreg-vaf (0.1-9) unstable; urgency=low
 
   * vaf-common.sh: download_upper_clients() aplica vat-operate
